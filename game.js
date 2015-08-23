@@ -135,7 +135,7 @@ var Game = {
                 targetX: 0, targetY: 0, targetScale: 1280 / Game.config.canvasWidth
             },
             level: {
-                nextLevel: 0,
+                nextLevel: parseInt(GG.Cookies.get('detached_level', '0')),
                 width: 0,
                 height: 0,
                 cellSize: 128,
@@ -371,6 +371,7 @@ var Game = {
 
         if (state.level.state === "win" && (state.time - state.level.winTime) > 1) {
             state.level.nextLevel = (state.level.nextLevel + 1) % Game.Levels.length;
+            GG.Cookies.set("detached_level", state.level.nextLevel);
             Game.loadLevel(state, false);
         }
 
