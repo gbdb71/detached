@@ -7,22 +7,22 @@ var Game = {
         ticksPerSecond: 120,
         maxTicksPerDraw: 6,
         keyboardMapping: {
-            32: "jump",
+            27: "cancel",
+            32: "enter",
             37: "left",
             38: "up",
             39: "right",
             40: "down",
-            65: "cancel",
-            81: "cancel",
-            87: "enter",
-            90: "enter"
+            67: "cancel",
+            88: "enter"
         }
     },
-    lerp3: function (a, b, t) {
+    lerp4: function (a, b, t) {
         return [
             a[0] * (1 - t) + b[0] * t,
             a[1] * (1 - t) + b[1] * t,
-            a[2] * (1 - t) + b[2] * t
+            a[2] * (1 - t) + b[2] * t,
+            a[3] * (1 - t) + b[3] * t
         ]
     },
     random: function (min, max) {
@@ -99,7 +99,8 @@ var Game = {
                 triangle_top_mask: undefined,
                 triangle_bottom_overlay: undefined,
                 triangle_middle_overlay: undefined,
-                triangle_top_overlay: undefined
+                triangle_top_overlay: undefined,
+                fill: undefined
             },
             time: 0,
             background: [0.15, 0.03, 0.16],
@@ -122,13 +123,40 @@ var Game = {
             player: undefined,
             npcs: [],
             colors: {
-                red: [0.6, 0.1, 0.1],
-                green: [0.2, 0.4, 0.7],
-                blue: [0.2, 0.7, 0.1]
+                red: [0.6, 0.1, 0.1, 1.0],
+                green: [0.2, 0.4, 0.7, 1.0],
+                blue: [0.2, 0.7, 0.1, 1.0]
             }
         };
 
+        Game.loadLevel(state);
+
+        GG.Shaders.loadProgram(gl, "shaders/fragment.glsl", "shaders/vertex.glsl", function (program) {
+            state.shader.program = program;
+            Object.keys(state.shader.attributes).forEach(function (key) {
+                state.shader.attributes[key] = state.gl.getAttribLocation(program, key);
+            });
+            Object.keys(state.shader.uniforms).forEach(function (key) {
+                state.shader.uniforms[key] = state.gl.getUniformLocation(program, key);
+            });
+            state.meshes.quad_128 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128);
+            state.meshes.quad_256 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 256, 256);
+            state.meshes.quad_4096 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 4096, 4096);
+        });
+
+        Object.keys(state.textures).forEach(function (textureName) {
+            GG.Textures.loadImage(gl, "textures/" + textureName + ".png", function (texture) {
+                state.textures[textureName] = texture;
+            });
+        });
+
+        GG.Loop.run(canvas, Game.config.ticksPerSecond, Game.config.maxTicksPerDraw, Game.config.keyboardMapping, Game.tick, Game.draw, state);
+        return state;
+    },
+    loadLevel: function (state) {
         // Build a random "level" for now
+        state.level.state = "load";
+        state.level.loadTime = state.time;
         state.level.centerX = 0.5 * state.level.width * state.level.cellSize;
         state.level.centerY = 0.5 * state.level.height * state.level.cellSize;
         state.level.cells = [];
@@ -152,7 +180,7 @@ var Game = {
 
         for (var y = state.level.height - 1; y >= 0; --y)
             for (var x = 0; x < state.level.width; ++x)
-                state.level.cells.push(createCell(x, y, ((x + y * 2) % 5) < 2 ? "wall" : "ground"));
+                state.level.cells.push(createCell(x, y, ((x + y * 2) % 5) < 1 ? "wall" : "ground"));
         state.level.cells.push(createCell(-1, 4, "exit"));
         state.level.index = {};
         for (var i = 0; i < state.level.cells.length; ++i) {
@@ -160,38 +188,39 @@ var Game = {
             state.level.index[cell.cellX + "_" + cell.cellY] = cell;
         }
 
+        state.npcs = [];
         state.npcs.push(Game.makeTriangle(5, 2, state.level, state.colors, true));
         state.npcs.push(Game.makeTriangle(3, 3, state.level, state.colors, true));
-        state.player = Game.makeTriangle(3, 2, state.level, state.colors, false);
+        if (state.player == undefined)
+            state.player = Game.makeTriangle(8, 0, state.level, state.colors, false);
+        else {
+            state.player.cellX = 8;
+            state.player.cellY = 0;
+            state.player.x = (8 + 0.5) * state.level.cellSize;
+            state.player.y = (0 + 0.5) * state.level.cellSize;
+            state.player.targetX = state.player.x;
+            state.player.targetY = state.player.y;
+        }
 
-        state.camera.targetX = state.level.centerX;
-        state.camera.targetY = state.level.centerY;
-        state.camera.x = state.camera.targetX;
-        state.camera.y = state.camera.targetY;
-
-        GG.Shaders.loadProgram(gl, "shaders/fragment.glsl", "shaders/vertex.glsl", function (program) {
-            state.shader.program = program;
-            Object.keys(state.shader.attributes).forEach(function (key) {
-                state.shader.attributes[key] = state.gl.getAttribLocation(program, key);
-            });
-            Object.keys(state.shader.uniforms).forEach(function (key) {
-                state.shader.uniforms[key] = state.gl.getUniformLocation(program, key);
-            });
-            state.meshes.quad_128 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128);
-            state.meshes.quad_256 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 256, 256);
-        });
-
-        Object.keys(state.textures).forEach(function (textureName) {
-            GG.Textures.loadImage(gl, "textures/" + textureName + ".png", function (texture) {
-                state.textures[textureName] = texture;
-            });
-        });
-
-        GG.Loop.run(canvas, Game.config.ticksPerSecond, Game.config.maxTicksPerDraw, Game.config.keyboardMapping, Game.tick, Game.draw, state);
-        return state;
+        state.camera.targetX = state.player.x;
+        state.camera.targetY = state.player.y;
+        state.camera.targetScale = 512 / Game.config.canvasWidth;
+        state.camera.x = state.player.x;
+        state.camera.y = state.player.y;
     },
     tick: function (state, frameTime, keyboardInput) {
         state.time += frameTime;
+
+        if (state.level.state === "win" && (state.time - state.level.winTime) > 1) {
+            Game.loadLevel(state);
+        }
+
+        if (state.level.state === "load" && (state.time - state.level.loadTime) > 1) {
+            state.level.state = "move";
+            state.camera.targetX = state.level.centerX;
+            state.camera.targetY = state.level.centerY;
+            state.camera.targetScale = 1280 / Game.config.canvasWidth;
+        }
 
         var player = state.player;
 
@@ -202,10 +231,18 @@ var Game = {
             npc.y = npc.targetY * 0.2 + npc.y * 0.8;
         });
 
-        {
+        if (state.level.state !== "win" && state.level.state !== "load") {
             if (Math.abs(player.x - player.targetX) < 2 && Math.abs(player.y - player.targetY) < 2) {
                 player.x = player.targetX;
                 player.y = player.targetY;
+
+                if (state.level.state !== "win" && state.level.index[player.cellX + "_" + player.cellY].type === "exit") {
+                    state.level.state = "win";
+                    state.camera.targetX = player.x;
+                    state.camera.targetY = player.y;
+                    state.camera.targetScale = 512 / Game.config.canvasWidth;
+                    state.level.winTime = state.time;
+                }
                 var neighbors = [
                     {x: player.cellX - 1, y: player.cellY},
                     {x: player.cellX + 1, y: player.cellY},
@@ -245,7 +282,8 @@ var Game = {
                         state.level.state = "swap";
                         state.level.swapNpc = nextMove.occupiedBy;
                     } else {
-                        if (nextMove.type !== "exit" || state.level.index[nextMove.x + "_" + nextMove.y].isOpen) {
+                        var isMovingOntoExit = nextMove.type === "exit" && state.level.index[nextMove.x + "_" + nextMove.y].isOpen;
+                        if (nextMove.type === "ground" || isMovingOntoExit) {
                             player.cellX = nextMove.x;
                             player.cellY = nextMove.y;
                             // TODO: make targetX/Y implicit ?
@@ -289,9 +327,14 @@ var Game = {
                 if (player.nextMoves.length > 0)
                     lastCell = player.nextMoves[player.nextMoves.length - 1];
                 else
-                    lastCell = {x: player.cellX, y: player.cellY, occupiedBy: undefined, type:undefined};
+                    lastCell = {x: player.cellX, y: player.cellY, occupiedBy: undefined, type: undefined};
                 if (lastCell.occupiedBy === undefined || lastCell.type === "exit") { // TODO: fix microbug here on level end
-                    var newCell = {x: lastCell.x + movementX, y: lastCell.y + movementY, occupiedBy: undefined, type:undefined};
+                    var newCell = {
+                        x: lastCell.x + movementX,
+                        y: lastCell.y + movementY,
+                        occupiedBy: undefined,
+                        type: undefined
+                    };
                     var newCellIndex = newCell.x + "_" + newCell.y;
                     if (state.level.index.hasOwnProperty(newCellIndex)) {
                         var cell = state.level.index[newCellIndex];
@@ -381,7 +424,7 @@ var Game = {
         if (state.shader.program !== undefined) {
             gl.useProgram(state.shader.program);
             gl.uniform1f(state.shader.uniforms.time, state.time);
-            gl.uniform3f(state.shader.uniforms.tint, 1, 1, 1);
+            gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
             if (state.textures.sample !== undefined) {
                 gl.uniform1i(state.shader.uniforms.sampler, 0);
                 gl.activeTexture(gl.TEXTURE0);
@@ -427,7 +470,9 @@ var Game = {
                 var npc = state.npcs[i];
                 drawTriangle(npc, state.level.state === "swap" && npc == state.level.swapNpc ? state.level.swapPart : undefined);
             }
-            drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined);
+
+            if (state.level.state !== "win")
+                drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined);
 
             state.vaoExtension.bindVertexArrayOES(state.meshes.quad_256);
             gl.bindTexture(gl.TEXTURE_2D, state.textures.wall);
@@ -439,6 +484,22 @@ var Game = {
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
                 }
             }
+
+            if (state.level.state === "win" || state.level.state === "load") {
+                GG.Transforms.toMat3(state.player.transform, model);
+                gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_4096);
+                if (state.level.state === "win")
+                    gl.uniform4f(state.shader.uniforms.tint, state.background[0], state.background[1], state.background[2], Math.min(1.0, state.time - state.level.winTime));
+                else
+                    gl.uniform4f(state.shader.uniforms.tint, state.background[0], state.background[1], state.background[2], 1.0 - Math.min(1.0, state.time - state.level.loadTime));
+
+                gl.bindTexture(gl.TEXTURE_2D, state.textures.fill);
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined);
+            }
         }
 
         function drawTriangle(triangle, highlightedPart) {
@@ -449,36 +510,36 @@ var Game = {
             GG.Transforms.toMat3(triangle.bottom.transform, model);
             gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
             if (highlightedPart === "bottom")
-                gl.uniform3fv(state.shader.uniforms.tint, Game.lerp3(bottomColor, [1, 1, 1], 0.5 + 0.25 * Math.sin(8 * state.time)));
+                gl.uniform4fv(state.shader.uniforms.tint, Game.lerp4(bottomColor, [1, 1, 1, 1], 0.5 + 0.25 * Math.sin(8 * state.time)));
             else
-                gl.uniform3fv(state.shader.uniforms.tint, bottomColor);
+                gl.uniform4fv(state.shader.uniforms.tint, bottomColor);
             gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_bottom_mask);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-            gl.uniform3f(state.shader.uniforms.tint, 1, 1, 1);
+            gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
             gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_bottom_overlay);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
             GG.Transforms.toMat3(triangle.middle.transform, model);
             gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
             if (highlightedPart === "middle")
-                gl.uniform3fv(state.shader.uniforms.tint, Game.lerp3(middleColor, [1, 1, 1], 0.5 + 0.25 * Math.sin(8 * state.time)));
+                gl.uniform4fv(state.shader.uniforms.tint, Game.lerp4(middleColor, [1, 1, 1, 1], 0.5 + 0.25 * Math.sin(8 * state.time)));
             else
-                gl.uniform3fv(state.shader.uniforms.tint, middleColor);
+                gl.uniform4fv(state.shader.uniforms.tint, middleColor);
             gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_middle_mask);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-            gl.uniform3f(state.shader.uniforms.tint, 1, 1, 1);
+            gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
             gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_middle_overlay);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
             GG.Transforms.toMat3(triangle.top.transform, model);
             gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
             if (highlightedPart === "top")
-                gl.uniform3fv(state.shader.uniforms.tint, Game.lerp3(topColor, [1, 1, 1], 0.5 + 0.25 * Math.sin(8 * state.time)));
+                gl.uniform4fv(state.shader.uniforms.tint, Game.lerp4(topColor, [1, 1, 1, 1], 0.5 + 0.25 * Math.sin(8 * state.time)));
             else
-                gl.uniform3fv(state.shader.uniforms.tint, topColor);
+                gl.uniform4fv(state.shader.uniforms.tint, topColor);
             gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_top_mask);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-            gl.uniform3f(state.shader.uniforms.tint, 1, 1, 1);
+            gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
             gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_top_overlay);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         }

@@ -5,7 +5,7 @@ varying vec2 fUv;
 
 uniform sampler2D sampler;
 uniform float time;
-uniform vec3 tint;
+uniform vec4 tint;
 
 vec4 rand3To4(vec3 seed) {
         return fract(
@@ -21,7 +21,8 @@ vec4 dither(vec4 color, vec3 seed) {
 void main(void) {
     vec4 color = texture2D(sampler, fUv);
 
-    color.rgb *= tint;
+    color.rgb *= tint.rgb;
+    color *= tint.a;
 
     color = dither(color, vec3(fPosition, sin(time)));
 
