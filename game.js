@@ -31,7 +31,7 @@ var Game = {
     randomPick: function (list) {
         return list[Math.floor(Math.random() * list.length)];
     },
-    makeTriangle: function (cellX, cellY, level, colors, markOccupied) {
+    makeTriangle: function (cellX, cellY, bottomColor, middleColor, topColor, level, markOccupied) {
         var x = (cellX + 0.5) * level.cellSize;
         var y = (cellY + 0.5) * level.cellSize;
         var triangle = {
@@ -43,17 +43,17 @@ var Game = {
             bottom: {
                 x: 0, y: -31 + 8, angle: Game.random(-0.03, 0.03), scale: 1,
                 transform: undefined,
-                color: Game.randomPick(Object.keys(colors))
+                color: bottomColor
             },
             middle: {
                 x: 0, y: 8, angle: Game.random(-0.05, 0.05), scale: 1,
                 transform: undefined,
-                color: Game.randomPick(Object.keys(colors))
+                color: middleColor
             },
             top: {
                 x: 0, y: 35 + 8, angle: Game.random(-0.07, 0.07), scale: 1,
                 transform: undefined,
-                color: Game.randomPick(Object.keys(colors))
+                color: topColor
             }
         };
         if (markOccupied)
@@ -109,8 +109,9 @@ var Game = {
                 targetX: 0, targetY: 0, targetScale: 1280 / Game.config.canvasWidth
             },
             level: {
-                width: 9,
-                height: 5,
+                nextLevel: 0,
+                width: 0,
+                height: 0,
                 cellSize: 128,
                 cells: [],
                 index: {},
@@ -154,12 +155,10 @@ var Game = {
         return state;
     },
     loadLevel: function (state) {
-        // Build a random "level" for now
+        var definition = Game.Levels[state.level.nextLevel];
+
         state.level.state = "load";
         state.level.loadTime = state.time;
-        state.level.centerX = 0.5 * state.level.width * state.level.cellSize;
-        state.level.centerY = 0.5 * state.level.height * state.level.cellSize;
-        state.level.cells = [];
 
         function createCell(x, y, type) {
             var cell = {
@@ -178,26 +177,51 @@ var Game = {
             return cell;
         }
 
-        for (var y = state.level.height - 1; y >= 0; --y)
-            for (var x = 0; x < state.level.width; ++x)
-                state.level.cells.push(createCell(x, y, ((x + y * 2) % 5) < 1 ? "wall" : "ground"));
-        state.level.cells.push(createCell(-1, 4, "exit"));
+        state.level.cells = [];
+        definition.level.forEach(function (cellDefinition) {
+            state.level.cells.push(createCell(cellDefinition.x, cellDefinition.y, cellDefinition.type));
+        });
+        state.level.cells.sort(function (a, b) {
+            if (a.y == b.y)
+                return a.x - b.x;
+            else
+                return a.y - b.y;
+        });
+
+        var minX = Infinity;
+        var maxX = -Infinity;
+        var minY = Infinity;
+        var maxY = -Infinity;
         state.level.index = {};
         for (var i = 0; i < state.level.cells.length; ++i) {
             var cell = state.level.cells[i];
             state.level.index[cell.cellX + "_" + cell.cellY] = cell;
+            if (cell.type !== "exit") {
+                minX = Math.min(minX, cell.cellX);
+                maxX = Math.max(maxX, cell.cellX);
+                minY = Math.min(minY, cell.cellY);
+                maxY = Math.max(maxY, cell.cellY);
+            }
         }
 
+        state.level.width = maxX - minX + 1;
+        state.level.height = maxY - minY + 1;
+
+        state.level.centerX = 0.5 * (minX + maxX + 1) * state.level.cellSize;
+        state.level.centerY = 0.5 * (minY + maxY + 1)* state.level.cellSize;
+
         state.npcs = [];
-        state.npcs.push(Game.makeTriangle(5, 2, state.level, state.colors, true));
-        state.npcs.push(Game.makeTriangle(3, 3, state.level, state.colors, true));
+        definition.npcs.forEach(function (npcDefinition) {
+            state.npcs.push(Game.makeTriangle(npcDefinition.x, npcDefinition.y, npcDefinition.bottom, npcDefinition.middle, npcDefinition.top, state.level, true));
+        });
+
         if (state.player == undefined)
-            state.player = Game.makeTriangle(8, 0, state.level, state.colors, false);
+            state.player = Game.makeTriangle(definition.player.x, definition.player.y, "red", "green", "blue", state.level, false);
         else {
-            state.player.cellX = 8;
-            state.player.cellY = 0;
-            state.player.x = (8 + 0.5) * state.level.cellSize;
-            state.player.y = (0 + 0.5) * state.level.cellSize;
+            state.player.cellX = definition.player.x;
+            state.player.cellY = definition.player.y;
+            state.player.x = (definition.player.x + 0.5) * state.level.cellSize;
+            state.player.y = (definition.player.y + 0.5) * state.level.cellSize;
             state.player.targetX = state.player.x;
             state.player.targetY = state.player.y;
         }
@@ -212,6 +236,7 @@ var Game = {
         state.time += frameTime;
 
         if (state.level.state === "win" && (state.time - state.level.winTime) > 1) {
+            state.level.nextLevel = (state.level.nextLevel + 1) % Game.Levels.length;
             Game.loadLevel(state);
         }
 
