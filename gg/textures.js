@@ -2,7 +2,7 @@
 
 GG.Textures = {
     loadImage: function (gl, url, onSuccess, onError) {
-        var image = new Image(url);
+        var image = new Image();
         image.onload = function () {
             // XXX: lost context
             var texture = gl.createTexture();
