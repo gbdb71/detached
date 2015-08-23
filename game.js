@@ -14,6 +14,7 @@ var Game = {
             39: "right",
             40: "down",
             67: "cancel",
+            82: "reload",
             88: "enter"
         }
     },
@@ -31,33 +32,57 @@ var Game = {
     randomPick: function (list) {
         return list[Math.floor(Math.random() * list.length)];
     },
-    makeTriangle: function (cellX, cellY, bottomColor, middleColor, topColor, level, markOccupied) {
-        var x = (cellX + 0.5) * level.cellSize;
-        var y = (cellY + 0.5) * level.cellSize;
+    makeTriangle: function (cellX, cellY, bottomColor, middleColor, topColor, isTalker, message, state, markOccupied) {
+        var x = (cellX + 0.5) * state.level.cellSize;
+        var y = (cellY + 0.5) * state.level.cellSize;
+        if (isTalker) {
+            x -= 0.1 * state.level.cellSize;
+            y += 0.2 * state.level.cellSize;
+        }
         var triangle = {
             x: x, y: y, angle: 0, scale: 1,
             transform: undefined,
             cellX: cellX, cellY: cellY,
             targetX: x, targetY: y,
             nextMoves: [],
+            isTalker: isTalker,
+            message: message !== undefined ? {
+                texture: "message_" + message,
+                x: -0.2 * state.level.cellSize,
+                y: 0.3 * state.level.cellSize,
+                angle: 0,
+                scale: 0,
+                targetScale: 0,
+                opacity: 0,
+                targetOpacity: 0,
+                transform: undefined
+            } : undefined,
             bottom: {
                 x: 0, y: -31 + 8, angle: Game.random(-0.03, 0.03), scale: 1,
                 transform: undefined,
-                color: bottomColor
+                color: bottomColor,
+                resetColor: bottomColor
             },
             middle: {
                 x: 0, y: 8, angle: Game.random(-0.05, 0.05), scale: 1,
                 transform: undefined,
-                color: middleColor
+                color: middleColor,
+                resetColor: middleColor
             },
             top: {
                 x: 0, y: 35 + 8, angle: Game.random(-0.07, 0.07), scale: 1,
                 transform: undefined,
-                color: topColor
+                color: topColor,
+                resetColor: topColor
             }
         };
         if (markOccupied)
-            level.index[cellX + "_" + cellY].occupiedBy = triangle;
+            state.level.index[cellX + "_" + cellY].occupiedBy = triangle;
+        if (message !== undefined) {
+            GG.Textures.loadImage(state.gl, "textures/messages/" + message + ".png", function (texture) {
+                state.textures["message_" + message] = texture;
+            });
+        }
         return triangle;
     },
     start: function (canvas) {
@@ -86,8 +111,6 @@ var Game = {
                 }
             },
             meshes: {
-                quad_128: undefined,
-                quad_256: undefined
             },
             textures: {
                 ground: undefined,
@@ -125,12 +148,12 @@ var Game = {
             npcs: [],
             colors: {
                 red: [0.6, 0.1, 0.1, 1.0],
-                green: [0.2, 0.4, 0.7, 1.0],
-                blue: [0.2, 0.7, 0.1, 1.0]
+                green: [0.2, 0.7, 0.1, 1.0],
+                blue: [0.2, 0.4, 0.7, 1.0]
             }
         };
 
-        Game.loadLevel(state);
+        Game.loadLevel(state, false);
 
         GG.Shaders.loadProgram(gl, "shaders/fragment.glsl", "shaders/vertex.glsl", function (program) {
             state.shader.program = program;
@@ -143,6 +166,7 @@ var Game = {
             state.meshes.quad_128 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128);
             state.meshes.quad_256 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 256, 256);
             state.meshes.quad_4096 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 4096, 4096);
+            state.meshes.message = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128, 0, 1);
         });
 
         Object.keys(state.textures).forEach(function (textureName) {
@@ -154,7 +178,7 @@ var Game = {
         GG.Loop.run(canvas, Game.config.ticksPerSecond, Game.config.maxTicksPerDraw, Game.config.keyboardMapping, Game.tick, Game.draw, state);
         return state;
     },
-    loadLevel: function (state) {
+    loadLevel: function (state, isReload) {
         var definition = Game.Levels[state.level.nextLevel];
 
         state.level.state = "load";
@@ -208,15 +232,16 @@ var Game = {
         state.level.height = maxY - minY + 1;
 
         state.level.centerX = 0.5 * (minX + maxX + 1) * state.level.cellSize;
-        state.level.centerY = 0.5 * (minY + maxY + 1)* state.level.cellSize;
+        state.level.centerY = 0.5 * (minY + maxY + 1) * state.level.cellSize;
 
         state.npcs = [];
         definition.npcs.forEach(function (npcDefinition) {
-            state.npcs.push(Game.makeTriangle(npcDefinition.x, npcDefinition.y, npcDefinition.bottom, npcDefinition.middle, npcDefinition.top, state.level, true));
+            state.npcs.push(Game.makeTriangle(npcDefinition.x, npcDefinition.y, npcDefinition.bottom, npcDefinition.middle, npcDefinition.top,
+                npcDefinition.isTalker, npcDefinition.message, state, true));
         });
 
         if (state.player == undefined)
-            state.player = Game.makeTriangle(definition.player.x, definition.player.y, "red", "green", "blue", state.level, false);
+            state.player = Game.makeTriangle(definition.player.x, definition.player.y, "red", "green", "blue", false, undefined, state, false);
         else {
             state.player.cellX = definition.player.x;
             state.player.cellY = definition.player.y;
@@ -224,6 +249,15 @@ var Game = {
             state.player.y = (definition.player.y + 0.5) * state.level.cellSize;
             state.player.targetX = state.player.x;
             state.player.targetY = state.player.y;
+        }
+        if (isReload) {
+            state.player.bottom.color = state.player.bottom.resetColor;
+            state.player.middle.color = state.player.middle.resetColor;
+            state.player.top.color = state.player.top.resetColor;
+        } else {
+            state.player.bottom.resetColor = state.player.bottom.color;
+            state.player.middle.resetColor = state.player.middle.color;
+            state.player.top.resetColor = state.player.top.color;
         }
 
         state.camera.targetX = state.player.x;
@@ -237,7 +271,7 @@ var Game = {
 
         if (state.level.state === "win" && (state.time - state.level.winTime) > 1) {
             state.level.nextLevel = (state.level.nextLevel + 1) % Game.Levels.length;
-            Game.loadLevel(state);
+            Game.loadLevel(state, false);
         }
 
         if (state.level.state === "load" && (state.time - state.level.loadTime) > 1) {
@@ -257,6 +291,13 @@ var Game = {
         });
 
         if (state.level.state !== "win" && state.level.state !== "load") {
+            if (keyboardInput.reload) {
+                keyboardInput.reload = false;
+                Game.loadLevel(state, true);
+            }
+        }
+
+        if (state.level.state !== "win" && state.level.state !== "load") {
             if (Math.abs(player.x - player.targetX) < 2 && Math.abs(player.y - player.targetY) < 2) {
                 player.x = player.targetX;
                 player.y = player.targetY;
@@ -268,6 +309,13 @@ var Game = {
                     state.camera.targetScale = 512 / Game.config.canvasWidth;
                     state.level.winTime = state.time;
                 }
+                state.npcs.forEach(function (npc) {
+                    if (npc.message !== undefined) {
+                        npc.message.targetOpacity = 0;
+                        if (npc.message.opacity < 0.1)
+                            npc.message.scale = 0;
+                    }
+                });
                 var neighbors = [
                     {x: player.cellX - 1, y: player.cellY},
                     {x: player.cellX + 1, y: player.cellY},
@@ -288,6 +336,9 @@ var Game = {
                                 if (player.bottom.color !== player.middle.color || player.middle.color !== player.top.color)
                                     cell.isOpen = false;
                             }
+                        } else if (cell.occupiedBy !== undefined && cell.occupiedBy.message !== undefined) {
+                            cell.occupiedBy.message.targetScale = 1;
+                            cell.occupiedBy.message.targetOpacity = 1;
                         }
                     }
                 });
@@ -426,6 +477,14 @@ var Game = {
             triangle.top.transform = GG.Transforms.multiply(
                 triangle.transform,
                 GG.Transforms.createTRS(triangle.top.x, triangle.top.y, triangle.top.angle, triangle.top.scale));
+
+            if (triangle.message != undefined) {
+                triangle.message.scale = triangle.message.targetScale * 0.2 + triangle.message.scale * 0.8;
+                triangle.message.opacity = triangle.message.targetOpacity * 0.05 + triangle.message.opacity * 0.95;
+                triangle.message.transform = GG.Transforms.multiply(
+                    triangle.transform,
+                    GG.Transforms.createTRS(triangle.message.x, triangle.message.y, triangle.message.angle, triangle.message.scale));
+            }
         }
 
         updateTriangle(player);
@@ -493,7 +552,8 @@ var Game = {
             state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
             for (i = 0; i < state.npcs.length; ++i) {
                 var npc = state.npcs[i];
-                drawTriangle(npc, state.level.state === "swap" && npc == state.level.swapNpc ? state.level.swapPart : undefined);
+                if (!npc.isTalker)
+                    drawTriangle(npc, state.level.state === "swap" && npc == state.level.swapNpc ? state.level.swapPart : undefined);
             }
 
             if (state.level.state !== "win")
@@ -509,6 +569,26 @@ var Game = {
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
                 }
             }
+
+            state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+            for (i = 0; i < state.npcs.length; ++i) {
+                npc = state.npcs[i];
+                if (npc.isTalker)
+                    drawTriangle(npc, undefined);
+            }
+
+            for (i = 0; i < state.npcs.length; ++i) {
+                npc = state.npcs[i];
+                if (npc.isTalker && npc.message !== undefined) {
+                    state.vaoExtension.bindVertexArrayOES(state.meshes.message);
+                    gl.bindTexture(gl.TEXTURE_2D, state.textures[npc.message.texture]);
+                    GG.Transforms.toMat3(npc.message.transform, model);
+                    gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                    gl.uniform4fv(state.shader.uniforms.tint, [1, 1, 1, npc.message.opacity]);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                }
+            }
+
 
             if (state.level.state === "win" || state.level.state === "load") {
                 GG.Transforms.toMat3(state.player.transform, model);

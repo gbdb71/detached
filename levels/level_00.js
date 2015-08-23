@@ -11,13 +11,15 @@ Game.Levels.push({
         {x: 4, y: 0, type: "ground"},
         {x: 5, y: 0, type: "ground"},
         {x: 6, y: 0, type: "ground"},
-        {x: 7, y: 0, type: "ground"}
+        {x: 7, y: 0, type: "ground"},
+        {x: 5, y: 1, type: "wall"}
     ],
     player: {
         x: 7, y: 0
     },
     npcs: [
         {x: 4, y: 0, bottom: "red", middle: "blue", top: "red"},
-        {x: 2, y: 0, bottom: "blue", middle: "green", top: "blue"}
+        {x: 2, y: 0, bottom: "blue", middle: "green", top: "blue"},
+        {x: 5, y: 1, bottom: "blue", middle: "green", top: "blue", isTalker: true, message: "good_luck"}
     ]
 });
