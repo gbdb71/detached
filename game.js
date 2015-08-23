@@ -7,6 +7,7 @@ var Game = {
         ticksPerSecond: 120,
         maxTicksPerDraw: 6,
         keyboardMapping: {
+            16: "shift",
             27: "cancel",
             32: "enter",
             37: "left",
@@ -14,6 +15,7 @@ var Game = {
             39: "right",
             40: "down",
             67: "cancel",
+            69: "edit",
             82: "reload",
             88: "enter"
         }
@@ -55,7 +57,8 @@ var Game = {
                 targetScale: 0,
                 opacity: 0,
                 targetOpacity: 0,
-                transform: undefined
+                transform: undefined,
+                name: message
             } : undefined,
             bottom: {
                 x: 0, y: -31 + 8, angle: Game.random(-0.03, 0.03), scale: 1,
@@ -110,8 +113,7 @@ var Game = {
                     tint: undefined
                 }
             },
-            meshes: {
-            },
+            meshes: {},
             textures: {
                 ground: undefined,
                 wall: undefined,
@@ -123,7 +125,8 @@ var Game = {
                 triangle_bottom_overlay: undefined,
                 triangle_middle_overlay: undefined,
                 triangle_top_overlay: undefined,
-                fill: undefined
+                fill: undefined,
+                edit_mode: undefined
             },
             time: 0,
             background: [0.15, 0.03, 0.16],
@@ -150,7 +153,8 @@ var Game = {
                 red: [0.6, 0.1, 0.1, 1.0],
                 green: [0.2, 0.7, 0.1, 1.0],
                 blue: [0.2, 0.4, 0.7, 1.0]
-            }
+            },
+            editable: false
         };
 
         Game.loadLevel(state, false);
@@ -167,6 +171,7 @@ var Game = {
             state.meshes.quad_256 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 256, 256);
             state.meshes.quad_4096 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 4096, 4096);
             state.meshes.message = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128, 0, 1);
+            state.meshes.edit_mode = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128, 1, 0);
         });
 
         Object.keys(state.textures).forEach(function (textureName) {
@@ -178,38 +183,12 @@ var Game = {
         GG.Loop.run(canvas, Game.config.ticksPerSecond, Game.config.maxTicksPerDraw, Game.config.keyboardMapping, Game.tick, Game.draw, state);
         return state;
     },
-    loadLevel: function (state, isReload) {
-        var definition = Game.Levels[state.level.nextLevel];
-
-        state.level.state = "load";
-        state.level.loadTime = state.time;
-
-        function createCell(x, y, type) {
-            var cell = {
-                type: type,
-                x: (x + 0.5) * state.level.cellSize,
-                y: (y + 0.5) * state.level.cellSize,
-                angle: 0,
-                scale: 1,
-                transform: undefined,
-                cellX: x,
-                cellY: y,
-                occupiedBy: undefined,
-                isOpen: true
-            };
-            cell.transform = GG.Transforms.createTRS(cell.x, cell.y, cell.angle, cell.scale);
-            return cell;
-        }
-
-        state.level.cells = [];
-        definition.level.forEach(function (cellDefinition) {
-            state.level.cells.push(createCell(cellDefinition.x, cellDefinition.y, cellDefinition.type));
-        });
+    indexLevel: function (state) {
         state.level.cells.sort(function (a, b) {
             if (a.y == b.y)
                 return a.x - b.x;
             else
-                return a.y - b.y;
+                return b.y - a.y;
         });
 
         var minX = Infinity;
@@ -233,6 +212,35 @@ var Game = {
 
         state.level.centerX = 0.5 * (minX + maxX + 1) * state.level.cellSize;
         state.level.centerY = 0.5 * (minY + maxY + 1) * state.level.cellSize;
+    },
+    createCell: function (x, y, type, state) {
+        var cell = {
+            type: type,
+            x: (x + 0.5) * state.level.cellSize,
+            y: (y + 0.5) * state.level.cellSize,
+            angle: 0,
+            scale: 1,
+            transform: undefined,
+            cellX: x,
+            cellY: y,
+            occupiedBy: undefined,
+            isOpen: true
+        };
+        cell.transform = GG.Transforms.createTRS(cell.x, cell.y, cell.angle, cell.scale);
+        return cell;
+    },
+    loadLevel: function (state, isReload) {
+        var definition = Game.Levels[state.level.nextLevel];
+
+        state.level.state = "load";
+        state.level.loadTime = state.time;
+
+        state.level.cells = [];
+        definition.level.forEach(function (cellDefinition) {
+            state.level.cells.push(Game.createCell(cellDefinition.x, cellDefinition.y, cellDefinition.type, state));
+        });
+
+        Game.indexLevel(state);
 
         state.npcs = [];
         definition.npcs.forEach(function (npcDefinition) {
@@ -241,7 +249,7 @@ var Game = {
         });
 
         if (state.player == undefined)
-            state.player = Game.makeTriangle(definition.player.x, definition.player.y, "red", "green", "blue", false, undefined, state, false);
+            state.player = Game.makeTriangle(definition.player.x, definition.player.y, "red", "red", "red", false, undefined, state, false);
         else {
             state.player.cellX = definition.player.x;
             state.player.cellY = definition.player.y;
@@ -266,7 +274,99 @@ var Game = {
         state.camera.x = state.player.x;
         state.camera.y = state.player.y;
     },
-    tick: function (state, frameTime, keyboardInput) {
+    dumpLevel: function (state) {
+        var cells = [];
+        state.level.cells.forEach(function (cell) {
+            cells.push({x: cell.cellX, y: cell.cellY, type: cell.type});
+        });
+        var npcs = [];
+        state.npcs.forEach(function (npc) {
+            npcs.push({
+                x: npc.cellX,
+                y: npc.cellY,
+                bottom: npc.bottom.color,
+                middle: npc.middle.color,
+                top: npc.top.color,
+                isTalker: npc.isTalker,
+                message: npc.message ? npc.message.name : undefined
+            });
+        });
+        return {
+            player: {x: state.player.cellX, y: state.player.cellY},
+            npcs: npcs,
+            level: cells
+        };
+    },
+    editLevel: function (state, keyboardInput, mouseInput, forceRefresh) {
+        if (mouseInput.justReleased) {
+            var mX = mouseInput.x - 0.5 * Game.config.canvasWidth;
+            var mY = Game.config.canvasHeight - mouseInput.y - 0.5 * Game.config.canvasHeight;
+            var cellX = Math.floor((mX * state.camera.scale + state.camera.x) / state.level.cellSize);
+            var cellY = Math.floor((mY * state.camera.scale + state.camera.y) / state.level.cellSize);
+            var subCellY = Math.floor(((mY * state.camera.scale + state.camera.y) / state.level.cellSize - cellY) * 3);
+            var cellIndex = cellX + "_" + cellY;
+            if (cellIndex in state.level.index) {
+                var cell = state.level.index[cellIndex];
+                if (cell.occupiedBy === undefined && (state.player.cellX != cellX || state.player.cellY != cellY)) {
+                    if (keyboardInput.shift) {
+                        if (cell.type === "ground")
+                            state.npcs.push(Game.makeTriangle(cellX, cellY, "red", "green", "blue", false, undefined, state, true));
+                        else if (cell.type === "wall")
+                            state.npcs.push(Game.makeTriangle(cellX, cellY, "red", "green", "blue", true, "good_luck", state, true));
+                    } else {
+                        if (cell.type === "ground")
+                            cell.type = "wall";
+                        else if (cell.type === "wall" || cell.type === "exit") {
+                            for (var i = 0; i < state.level.cells.length; ++i) {
+                                if (state.level.cells[i] === cell) {
+                                    state.level.cells.splice(i, 1);
+                                    break;
+                                }
+                            }
+                            Game.indexLevel(state);
+                        }
+                    }
+                } else {
+                    if (keyboardInput.shift && cell.occupiedBy !== undefined) {
+                        for (i = 0; i < state.npcs.length; ++i) {
+                            if (state.npcs[i] === cell.occupiedBy) {
+                                state.npcs.splice(i, 1);
+                                cell.occupiedBy = undefined;
+                                break;
+                            }
+                        }
+                    } else {
+                        var triangle = cell.occupiedBy !== undefined ? cell.occupiedBy : state.player;
+                        var part = ["bottom", "middle", "top"][subCellY];
+                        var partColor = triangle[part].color;
+                        var colors = Object.keys(state.colors);
+                        for (i = 0; i < colors.length; ++i) {
+                            if (colors[i] == partColor) {
+                                var newColor = colors[(i + 1) % colors.length];
+                                triangle[part].color = newColor;
+                                triangle[part].resetColor = newColor;
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                state.level.cells.push(Game.createCell(cellX, cellY, keyboardInput.shift ? "exit" : "ground", state));
+                Game.indexLevel(state);
+            }
+        }
+        if (mouseInput.justReleased || forceRefresh) {
+            if (document.getElementById("gg-level-dump") == null) {
+                var fields = document.createElement("div");
+                fields.setAttribute("id", "gg-level-dump");
+                document.body.appendChild(fields);
+            }
+            document.getElementById("gg-level-dump").innerText = JSON.stringify(Game.dumpLevel(state), undefined, 4);
+        }
+    },
+    tick: function (state, frameTime, keyboardInput, mouseInput) {
+        var forceEditRefresh = false;
+
         state.time += frameTime;
 
         if (state.level.state === "win" && (state.time - state.level.winTime) > 1) {
@@ -352,17 +452,19 @@ var Game = {
                     var nextX = (nextMove.x + 0.5) * state.level.cellSize;
                     var nextY = (nextMove.y + 0.5) * state.level.cellSize;
                     if (nextMove.occupiedBy !== undefined) {
-                        state.camera.targetX = 0.5 * (player.x + nextX);
-                        state.camera.targetY = 0.5 * (player.y + nextY);
-                        state.camera.targetScale = 700 / Game.config.canvasWidth;
-                        state.level.state = "swap";
-                        state.level.swapNpc = nextMove.occupiedBy;
+                        if (!nextMove.occupiedBy.isTalker) {
+                            state.camera.targetX = 0.5 * (player.x + nextX);
+                            state.camera.targetY = 0.5 * (player.y + nextY);
+                            state.camera.targetScale = 700 / Game.config.canvasWidth;
+                            state.level.state = "swap";
+                            state.level.swapNpc = nextMove.occupiedBy;
+                        }
                     } else {
                         var isMovingOntoExit = nextMove.type === "exit" && state.level.index[nextMove.x + "_" + nextMove.y].isOpen;
-                        if (nextMove.type === "ground" || isMovingOntoExit) {
+                        if (nextMove.type === "ground" || (isMovingOntoExit && !state.editable)) {
+                            forceEditRefresh = true;
                             player.cellX = nextMove.x;
                             player.cellY = nextMove.y;
-                            // TODO: make targetX/Y implicit ?
                             player.targetX = nextX;
                             player.targetY = nextY;
                         }
@@ -448,6 +550,7 @@ var Game = {
                 state.camera.targetY = state.level.centerY;
                 state.camera.targetScale = 1280 / Game.config.canvasWidth;
                 state.level.state = "move";
+                forceEditRefresh = true;
             } else {
                 if (keyboardInput.up) {
                     keyboardInput.up = false;
@@ -495,6 +598,18 @@ var Game = {
         camera.x = camera.targetX * 0.1 + camera.x * 0.9;
         camera.y = camera.targetY * 0.1 + camera.y * 0.9;
         camera.scale = camera.targetScale * 0.1 + camera.scale * 0.9;
+
+        if (keyboardInput.edit) {
+            keyboardInput.edit = false;
+            state.editable = !state.editable;
+            forceEditRefresh = true;
+        }
+        if (state.editable)
+            Game.editLevel(state, keyboardInput, mouseInput, forceEditRefresh);
+        else if (document.getElementById("gg-level-dump") !== null) {
+            var dump = document.getElementById("gg-level-dump");
+            dump.parentNode.removeChild(dump);
+        }
     },
     draw: function (state) {
         var gl = state.gl;
@@ -604,6 +719,19 @@ var Game = {
 
                 state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
                 drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined);
+            }
+
+            if (state.editable) {
+                var transform = GG.Transforms.createTRS(
+                    -0.5 * Game.config.canvasWidth * camera.scale + camera.x,
+                    0.5 * Game.config.canvasHeight * camera.scale + camera.y, 0, camera.scale);
+
+                GG.Transforms.toMat3(transform, model);
+                gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                state.vaoExtension.bindVertexArrayOES(state.meshes.edit_mode);
+                gl.bindTexture(gl.TEXTURE_2D, state.textures.edit_mode);
+                gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
             }
         }
 

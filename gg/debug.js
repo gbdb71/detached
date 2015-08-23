@@ -27,7 +27,13 @@ GG.Debug = {
             requestAnimationFrame(update, label);
         }
 
-        document.getElementById("gg-debug-fields").appendChild(label);
+        if (document.getElementById("gg-debug-fields") == null) {
+            var fields = document.createElement("div");
+            fields.setAttribute("id", "gg-debug-fields");
+            document.body.appendChild(fields);
+        }
+        document.getElementById("gg-debug-fields") .appendChild(label);
+
         update();
     }
 };

@@ -8,6 +8,7 @@ GG.Loop = {
         var unusedTimeMillisecond = frameTimeMillisecond;
         var wasTooSlow = false;
         var keyboardInput = GG.Loop.initKeyboardInput(keyboardMapping);
+        var mouseInput = GG.Loop.initMouseInput(element);
 
         function runLoop(time_ms) {
             if (lastTimeMillisecond === undefined)
@@ -18,9 +19,11 @@ GG.Loop = {
             var ticks = 0;
             var isTooSlow = false;
             while (unusedTimeMillisecond >= frameTimeMillisecond) {
-                if (ticks < maxTicksPerDraw)
-                    tickFunction(state, frameTimeSecond, keyboardInput, wasTooSlow);
-                else
+                if (ticks < maxTicksPerDraw) {
+                    tickFunction(state, frameTimeSecond, keyboardInput, mouseInput, wasTooSlow);
+                    mouseInput.justPressed = false;
+                    mouseInput.justReleased = false;
+                } else
                     isTooSlow = true;
                 unusedTimeMillisecond -= frameTimeMillisecond;
                 ++ticks;
@@ -31,6 +34,40 @@ GG.Loop = {
         }
 
         requestAnimationFrame(runLoop, element);
+    },
+    initMouseInput: function(element) {
+        var mouse = {
+            x: 0,
+            y: 0,
+            justPressed: false,
+            justReleased: false,
+            pressed: false
+        };
+        element.addEventListener('mousemove', function (event) {
+            var x = event.offsetX !== undefined ? event.offsetX : event.layerX;
+            var y = event.offsetY !== undefined ? event.offsetY : event.layerY;
+            mouse.x = x;
+            mouse.y = y;
+        });
+
+        element.addEventListener('mousedown', function (event) {
+            if (event.button == 0 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                mouse.justPressed = true;
+                mouse.pressed = true;
+            }
+        });
+
+        element.addEventListener('contextmenu', function(event) {
+            event.preventDefault();
+        });
+
+        document.addEventListener('mouseup', function (event) {
+            if (event.button == 0) {
+                mouse.justReleased = true;
+                mouse.pressed = false;
+            }
+        });
+        return mouse;
     },
     initKeyboardInput: function (mapping) {
         var downKeys = {};

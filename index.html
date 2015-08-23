@@ -26,6 +26,11 @@
         #gg-canvas {
             display: block;
             margin: auto;
+            position: relative;
+            user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            -webkit-user-select: none;
         }
 
         #gg-debug-fields {
@@ -34,6 +39,18 @@
             left: 0;
             background: rgba(0, 0, 0, 0.3);
             color: #fff;
+        }
+
+        #gg-level-dump {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            overflow-y: scroll;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-family: monospace;
+            white-space: pre;
         }
 
         .gg-debug-field {
@@ -47,11 +64,13 @@
 </head>
 <body>
 <h1>Passage</h1>
-<p>We came as <em>friends</em>, eager to meet them, to <em>exchange</em>.<br />They didn't <em>accept</em> us, said we were too <em>weird</em>, that we must <em>conform</em>.<br />
+
+<p>We came as <em>friends</em>, eager to meet them, to <em>exchange</em>.<br/>They didn't <em>accept</em> us, said we
+    were too <em>weird</em>, that we must <em>conform</em>.<br/>
     Many tried, never came back, but I know I can do it, I'll <em>free</em> my people.</p>
 <canvas id="gg-canvas"></canvas>
 <p><em>Arrow</em> keys to move, <em>Space</em> or <em>x</em> to validate, <em>Esc</em> or <em>c</em> to cancel.</p>
-<div id="gg-debug-fields"></div>
+
 <script src="gg/_.js"></script>
 <script src="gg/debug.js"></script>
 <script src="gg/files.js"></script>
