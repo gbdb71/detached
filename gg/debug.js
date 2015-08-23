@@ -15,13 +15,13 @@ GG.Debug = {
 
         var label = document.createElement("label");
         label.className = "gg-debug-field";
-        label.innerText = property + "\u2005:";
+        label.textContent = property + "\u2005:";
         label.appendChild(input);
         label.appendChild(value);
 
         function update() {
             if (input.value !== parent[property]) {
-                value.innerText = parent[property].toPrecision(5);
+                value.textContent = parent[property].toPrecision(5);
                 input.setAttribute("value", parent[property]);
             }
             requestAnimationFrame(update, label);

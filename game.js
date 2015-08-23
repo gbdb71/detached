@@ -361,7 +361,7 @@ var Game = {
                 fields.setAttribute("id", "gg-level-dump");
                 document.body.appendChild(fields);
             }
-            document.getElementById("gg-level-dump").innerText = JSON.stringify(Game.dumpLevel(state), undefined, 4);
+            document.getElementById("gg-level-dump").textContent = JSON.stringify(Game.dumpLevel(state), undefined, 4);
         }
     },
     tick: function (state, frameTime, keyboardInput, mouseInput) {
