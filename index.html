@@ -5,7 +5,22 @@
     <title>GG</title>
     <style>
         body {
-            background: rgba(187, 187, 187, 1.0);
+            font-family: sans-serif;
+            color: #80707a;
+            background: #000;
+        }
+
+        h1, p {
+            text-align: center;
+        }
+
+        h1 {
+            color: #fff;
+        }
+
+        p em {
+            font-style: normal;
+            color: #b3a8af;
         }
 
         #gg-canvas {
@@ -19,7 +34,6 @@
             left: 0;
             background: rgba(0, 0, 0, 0.3);
             color: #fff;
-            padding: 1em;
         }
 
         .gg-debug-field {
@@ -32,7 +46,11 @@
     </style>
 </head>
 <body>
+<h1>Passage</h1>
+<p>We came as <em>friends</em>, eager to meet them, to <em>exchange</em>.<br />They didn't <em>accept</em> us, said we were too <em>weird</em>, that we must <em>conform</em>.<br />
+    Many tried, never came back, but I know I can do it, I'll <em>free</em> my people.</p>
 <canvas id="gg-canvas"></canvas>
+<p><em>Arrow</em> keys to move, <em>Space</em> or <em>x</em> to validate, <em>Esc</em> or <em>c</em> to cancel.</p>
 <div id="gg-debug-fields"></div>
 <script src="gg/_.js"></script>
 <script src="gg/debug.js"></script>
