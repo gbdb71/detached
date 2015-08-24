@@ -126,16 +126,19 @@ var Game = {
                 triangle_middle_overlay: undefined,
                 triangle_top_overlay: undefined,
                 fill: undefined,
-                edit_mode: undefined
+                edit_mode: undefined,
+                menu_bottom: undefined,
+                menu_middle: undefined,
+                menu_top: undefined
             },
             time: 0,
             background: [0.15, 0.03, 0.16],
             camera: {
-                x: 0, y: 0, angle: 0, scale: 1280 / Game.config.canvasWidth,
-                targetX: 0, targetY: 0, targetScale: 1280 / Game.config.canvasWidth
+                x: 0, y: 0, angle: 0, scale: 512 / Game.config.canvasWidth,
+                targetX: 0, targetY: 0, targetScale: 512 / Game.config.canvasWidth
             },
             level: {
-                nextLevel: parseInt(GG.Cookies.get('detached_level', '0')),
+                nextLevel: 0,
                 width: 0,
                 height: 0,
                 cellSize: 128,
@@ -143,7 +146,7 @@ var Game = {
                 index: {},
                 centerX: 0,
                 centerY: 0,
-                state: "move",
+                state: "intro",
                 swapPart: "top",
                 swapNpc: undefined
             },
@@ -154,10 +157,20 @@ var Game = {
                 green: [0.2, 0.7, 0.1, 1.0],
                 blue: [0.2, 0.4, 0.7, 1.0]
             },
-            editable: false
+            editable: false,
+            intro: {
+                activeMenu: "top",
+                wasActive: true
+            }
         };
 
-        Game.loadLevel(state, false);
+        state.player = Game.makeTriangle(0, 0, "red", "red", "red", false, undefined, state, false);
+        state.camera.targetX = state.player.x - 0.7 * state.level.cellSize;
+        state.camera.targetY = state.player.y + 0.5 * state.level.cellSize;
+        state.camera.targetScale = 512 / Game.config.canvasWidth;
+        state.camera.x = state.camera.targetX;
+        state.camera.y = state.camera.targetY;
+        state.camera.scale = state.camera.targetScale;
 
         GG.Shaders.loadProgram(gl, "shaders/fragment.glsl", "shaders/vertex.glsl", function (program) {
             state.shader.program = program;
@@ -172,6 +185,7 @@ var Game = {
             state.meshes.quad_4096 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 4096, 4096);
             state.meshes.message = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128, 0, 1);
             state.meshes.edit_mode = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128, 1, 0);
+            state.meshes.menu_text = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 256, 256, 0, 1);
         });
 
         Object.keys(state.textures).forEach(function (textureName) {
@@ -248,16 +262,14 @@ var Game = {
                 npcDefinition.isTalker, npcDefinition.message, state, true));
         });
 
-        if (state.player == undefined)
-            state.player = Game.makeTriangle(definition.player.x, definition.player.y, "red", "red", "red", false, undefined, state, false);
-        else {
-            state.player.cellX = definition.player.x;
-            state.player.cellY = definition.player.y;
-            state.player.x = (definition.player.x + 0.5) * state.level.cellSize;
-            state.player.y = (definition.player.y + 0.5) * state.level.cellSize;
-            state.player.targetX = state.player.x;
-            state.player.targetY = state.player.y;
-        }
+        var previousPlayerX = state.player.x;
+        var previousPlayerY = state.player.y;
+        state.player.cellX = definition.player.x;
+        state.player.cellY = definition.player.y;
+        state.player.x = (definition.player.x + 0.5) * state.level.cellSize;
+        state.player.y = (definition.player.y + 0.5) * state.level.cellSize;
+        state.player.targetX = state.player.x;
+        state.player.targetY = state.player.y;
         if (isReload) {
             state.player.bottom.color = state.player.bottom.resetColor;
             state.player.middle.color = state.player.middle.resetColor;
@@ -271,8 +283,16 @@ var Game = {
         state.camera.targetX = state.player.x;
         state.camera.targetY = state.player.y;
         state.camera.targetScale = 512 / Game.config.canvasWidth;
-        state.camera.x = state.player.x;
-        state.camera.y = state.player.y;
+        if (state.intro.wasActive) {
+            state.intro.wasActive = false;
+            var previousCameraX = state.camera.x;
+            var previousCameraY = state.camera.y;
+            state.camera.x = state.player.x + previousCameraX - previousPlayerX;
+            state.camera.y = state.player.y + previousCameraY - previousPlayerY;
+        } else {
+            state.camera.x = state.player.x;
+            state.camera.y = state.player.y;
+        }
     },
     dumpLevel: function (state) {
         var cells = [];
@@ -365,210 +385,237 @@ var Game = {
         }
     },
     tick: function (state, frameTime, keyboardInput, mouseInput) {
-        var forceEditRefresh = false;
-
         state.time += frameTime;
 
-        if (state.level.state === "win" && (state.time - state.level.winTime) > 1) {
-            state.level.nextLevel = (state.level.nextLevel + 1) % Game.Levels.length;
-            GG.Cookies.set("detached_level", state.level.nextLevel);
-            Game.loadLevel(state, false);
-        }
+        var forceEditRefresh = false;
 
-        if (state.level.state === "load" && (state.time - state.level.loadTime) > 1) {
-            state.level.state = "move";
-            state.camera.targetX = state.level.centerX;
-            state.camera.targetY = state.level.centerY;
-            state.camera.targetScale = 1280 / Game.config.canvasWidth;
-        }
-
-        var player = state.player;
-
-        player.x = player.targetX * 0.2 + player.x * 0.8;
-        player.y = player.targetY * 0.2 + player.y * 0.8;
-        state.npcs.forEach(function (npc) {
-            npc.x = npc.targetX * 0.2 + npc.x * 0.8;
-            npc.y = npc.targetY * 0.2 + npc.y * 0.8;
-        });
-
-        if (state.level.state !== "win" && state.level.state !== "load") {
-            if (keyboardInput.reload) {
-                keyboardInput.reload = false;
-                Game.loadLevel(state, true);
+        if (state.level.state === "intro") {
+            if (keyboardInput.down) {
+                keyboardInput.down = false;
+                if (state.intro.activeMenu === "top")
+                    state.intro.activeMenu = "middle";
+                else if (state.intro.activeMenu === "middle")
+                    state.intro.activeMenu = "bottom";
             }
-        }
+            if (keyboardInput.up) {
+                keyboardInput.up = false;
+                if (state.intro.activeMenu === "bottom")
+                    state.intro.activeMenu = "middle";
+                else if (state.intro.activeMenu === "middle")
+                    state.intro.activeMenu = "top";
+            }
+            if (keyboardInput.enter && state.intro.activeMenu === "bottom") {
+                keyboardInput.enter = false;
+                state.level.nextLevel = parseInt(GG.Cookies.get('detached_level', '0'));
+                Game.loadLevel(state, false);
+            }
+        } else {
+            var player = state.player;
 
-        if (state.level.state !== "win" && state.level.state !== "load") {
-            if (Math.abs(player.x - player.targetX) < 2 && Math.abs(player.y - player.targetY) < 2) {
-                player.x = player.targetX;
-                player.y = player.targetY;
+            if (state.level.state === "win" && (state.time - state.level.winTime) > 1) {
+                state.level.nextLevel = (state.level.nextLevel + 1) % Game.Levels.length;
+                GG.Cookies.set("detached_level", state.level.nextLevel);
+                Game.loadLevel(state, false);
+            }
 
-                if (state.level.state !== "win" && state.level.index[player.cellX + "_" + player.cellY].type === "exit") {
-                    state.level.state = "win";
-                    state.camera.targetX = player.x;
-                    state.camera.targetY = player.y;
-                    state.camera.targetScale = 512 / Game.config.canvasWidth;
-                    state.level.winTime = state.time;
+            if (state.level.state === "load" && (state.time - state.level.loadTime) > 1) {
+                state.level.state = "move";
+                state.camera.targetX = state.level.centerX;
+                state.camera.targetY = state.level.centerY;
+                state.camera.targetScale = 1280 / Game.config.canvasWidth;
+            }
+
+            player.x = player.targetX * 0.2 + player.x * 0.8;
+            player.y = player.targetY * 0.2 + player.y * 0.8;
+            state.npcs.forEach(function (npc) {
+                npc.x = npc.targetX * 0.2 + npc.x * 0.8;
+                npc.y = npc.targetY * 0.2 + npc.y * 0.8;
+            });
+
+            if (state.level.state !== "win" && state.level.state !== "load") {
+                if (keyboardInput.reload) {
+                    keyboardInput.reload = false;
+                    Game.loadLevel(state, true);
                 }
-                state.npcs.forEach(function (npc) {
-                    if (npc.message !== undefined) {
-                        npc.message.targetOpacity = 0;
-                        if (npc.message.opacity < 0.1)
-                            npc.message.scale = 0;
+            }
+
+            if (state.level.state !== "win" && state.level.state !== "load") {
+                if (Math.abs(player.x - player.targetX) < 2 && Math.abs(player.y - player.targetY) < 2) {
+                    player.x = player.targetX;
+                    player.y = player.targetY;
+
+                    if (state.level.state !== "win" && state.level.index[player.cellX + "_" + player.cellY].type === "exit") {
+                        state.level.state = "win";
+                        state.camera.targetX = player.x;
+                        state.camera.targetY = player.y;
+                        state.camera.targetScale = 512 / Game.config.canvasWidth;
+                        state.level.winTime = state.time;
                     }
-                });
-                var neighbors = [
-                    {x: player.cellX - 1, y: player.cellY},
-                    {x: player.cellX + 1, y: player.cellY},
-                    {x: player.cellX, y: player.cellY - 1},
-                    {x: player.cellX, y: player.cellY + 1}
-                ];
-                var isNearExit = false;
-                neighbors.forEach(function (neighbor) {
-                    var cellIndex = neighbor.x + "_" + neighbor.y;
-                    if (cellIndex in state.level.index) {
-                        var cell = state.level.index[cellIndex];
-                        if (cell.type === "exit") {
-                            isNearExit = true;
-                            state.camera.targetX = state.level.centerX * 0.9 + player.x * 0.1;
-                            state.camera.targetY = state.level.centerY * 0.9 + player.y * 0.1;
-                            state.camera.targetScale = 1280 / Game.config.canvasWidth;
-                            if (cell.isOpen) {
-                                if (player.bottom.color !== player.middle.color || player.middle.color !== player.top.color)
-                                    cell.isOpen = false;
+                    state.npcs.forEach(function (npc) {
+                        if (npc.message !== undefined) {
+                            npc.message.targetOpacity = 0;
+                            if (npc.message.opacity < 0.1)
+                                npc.message.scale = 0;
+                        }
+                    });
+                    var neighbors = [
+                        {x: player.cellX - 1, y: player.cellY},
+                        {x: player.cellX + 1, y: player.cellY},
+                        {x: player.cellX, y: player.cellY - 1},
+                        {x: player.cellX, y: player.cellY + 1}
+                    ];
+                    var isNearExit = false;
+                    neighbors.forEach(function (neighbor) {
+                        var cellIndex = neighbor.x + "_" + neighbor.y;
+                        if (cellIndex in state.level.index) {
+                            var cell = state.level.index[cellIndex];
+                            if (cell.type === "exit") {
+                                isNearExit = true;
+                                state.camera.targetX = state.level.centerX * 0.9 + player.x * 0.1;
+                                state.camera.targetY = state.level.centerY * 0.9 + player.y * 0.1;
+                                state.camera.targetScale = 1280 / Game.config.canvasWidth;
+                                if (cell.isOpen) {
+                                    if (player.bottom.color !== player.middle.color || player.middle.color !== player.top.color)
+                                        cell.isOpen = false;
+                                }
+                            } else if (cell.occupiedBy !== undefined && cell.occupiedBy.message !== undefined) {
+                                cell.occupiedBy.message.targetScale = 1;
+                                cell.occupiedBy.message.targetOpacity = 1;
                             }
-                        } else if (cell.occupiedBy !== undefined && cell.occupiedBy.message !== undefined) {
-                            cell.occupiedBy.message.targetScale = 1;
-                            cell.occupiedBy.message.targetOpacity = 1;
+                        }
+                    });
+                    if (!isNearExit && state.level.state === "move") {
+                        state.camera.targetX = state.level.centerX;
+                        state.camera.targetY = state.level.centerY;
+                        state.camera.targetScale = 1280 / Game.config.canvasWidth;
+                    }
+                    if (player.nextMoves.length > 0) {
+                        var nextMove = player.nextMoves[0];
+                        var nextX = (nextMove.x + 0.5) * state.level.cellSize;
+                        var nextY = (nextMove.y + 0.5) * state.level.cellSize;
+                        if (nextMove.occupiedBy !== undefined) {
+                            if (!nextMove.occupiedBy.isTalker) {
+                                state.camera.targetX = 0.5 * (player.x + nextX);
+                                state.camera.targetY = 0.5 * (player.y + nextY);
+                                state.camera.targetScale = 700 / Game.config.canvasWidth;
+                                state.level.state = "swap";
+                                state.level.swapNpc = nextMove.occupiedBy;
+                            }
+                        } else {
+                            var isMovingOntoExit = nextMove.type === "exit" && state.level.index[nextMove.x + "_" + nextMove.y].isOpen;
+                            if (nextMove.type === "ground" || (isMovingOntoExit && !state.editable)) {
+                                forceEditRefresh = true;
+                                player.cellX = nextMove.x;
+                                player.cellY = nextMove.y;
+                                player.targetX = nextX;
+                                player.targetY = nextY;
+                            }
+                        }
+                        player.nextMoves.splice(0, 1);
+
+                        state.level.cells.forEach(function (cell) {
+                            if (cell.type === "exit" && !cell.isOpen) {
+                                cell.isOpen = true;
+                            }
+                        });
+                    }
+                }
+            }
+            if (state.level.state === "move") {
+                var movementX = 0;
+                var movementY = 0;
+                if (keyboardInput.left) {
+                    movementX -= 1;
+                    keyboardInput.left = false;
+                }
+                if (keyboardInput.right) {
+                    movementX += 1;
+                    keyboardInput.right = false;
+                }
+                if (keyboardInput.down) {
+                    movementY -= 1;
+                    keyboardInput.down = false;
+                }
+                if (keyboardInput.up) {
+                    movementY += 1;
+                    keyboardInput.up = false;
+                }
+                if (movementX !== 0)
+                    movementY = 0;
+                if (movementX !== 0 || movementY !== 0) {
+                    var lastCell;
+                    if (player.nextMoves.length > 0)
+                        lastCell = player.nextMoves[player.nextMoves.length - 1];
+                    else
+                        lastCell = {x: player.cellX, y: player.cellY, occupiedBy: undefined, type: undefined};
+                    if (lastCell.occupiedBy === undefined || lastCell.type === "exit") { // TODO: fix microbug here on level end
+                        var newCell = {
+                            x: lastCell.x + movementX,
+                            y: lastCell.y + movementY,
+                            occupiedBy: undefined,
+                            type: undefined
+                        };
+                        var newCellIndex = newCell.x + "_" + newCell.y;
+                        if (state.level.index.hasOwnProperty(newCellIndex)) {
+                            var cell = state.level.index[newCellIndex];
+                            newCell.type = cell.type;
+                            if (cell.type === "ground" || cell.type === "exit") {
+                                newCell.occupiedBy = cell.occupiedBy;
+                                player.nextMoves.push(newCell);
+                            }
                         }
                     }
-                });
-                if (!isNearExit && state.level.state === "move") {
+                }
+            } else if (state.level.state === "swap") {
+                if (keyboardInput.cancel) {
+                    keyboardInput.cancel = false;
                     state.camera.targetX = state.level.centerX;
                     state.camera.targetY = state.level.centerY;
                     state.camera.targetScale = 1280 / Game.config.canvasWidth;
-                }
-                if (player.nextMoves.length > 0) {
-                    var nextMove = player.nextMoves[0];
-                    var nextX = (nextMove.x + 0.5) * state.level.cellSize;
-                    var nextY = (nextMove.y + 0.5) * state.level.cellSize;
-                    if (nextMove.occupiedBy !== undefined) {
-                        if (!nextMove.occupiedBy.isTalker) {
-                            state.camera.targetX = 0.5 * (player.x + nextX);
-                            state.camera.targetY = 0.5 * (player.y + nextY);
-                            state.camera.targetScale = 700 / Game.config.canvasWidth;
-                            state.level.state = "swap";
-                            state.level.swapNpc = nextMove.occupiedBy;
-                        }
-                    } else {
-                        var isMovingOntoExit = nextMove.type === "exit" && state.level.index[nextMove.x + "_" + nextMove.y].isOpen;
-                        if (nextMove.type === "ground" || (isMovingOntoExit && !state.editable)) {
-                            forceEditRefresh = true;
-                            player.cellX = nextMove.x;
-                            player.cellY = nextMove.y;
-                            player.targetX = nextX;
-                            player.targetY = nextY;
-                        }
-                    }
-                    player.nextMoves.splice(0, 1);
+                    state.level.state = "move";
+                } else if (keyboardInput.enter) {
+                    var npc = state.level.swapNpc;
 
-                    state.level.cells.forEach(function (cell) {
-                        if (cell.type === "exit" && !cell.isOpen) {
-                            cell.isOpen = true;
-                        }
+                    var tmp = player[state.level.swapPart].color;
+                    player[state.level.swapPart].color = npc[state.level.swapPart].color;
+                    npc[state.level.swapPart].color = tmp;
+
+                    state.level.index[npc.cellX + "_" + npc.cellY].occupiedBy = undefined;
+                    state.level.index[player.cellX + "_" + player.cellY].occupiedBy = npc;
+                    ["targetX", "targetY", "cellX", "cellY"].forEach(function (key) {
+                        var tmp = player[key];
+                        player[key] = npc[key];
+                        npc[key] = tmp;
                     });
-                }
-            }
-        }
-        if (state.level.state === "move") {
-            var movementX = 0;
-            var movementY = 0;
-            if (keyboardInput.left) {
-                movementX -= 1;
-                keyboardInput.left = false;
-            }
-            if (keyboardInput.right) {
-                movementX += 1;
-                keyboardInput.right = false;
-            }
-            if (keyboardInput.down) {
-                movementY -= 1;
-                keyboardInput.down = false;
-            }
-            if (keyboardInput.up) {
-                movementY += 1;
-                keyboardInput.up = false;
-            }
-            if (movementX !== 0)
-                movementY = 0;
-            if (movementX !== 0 || movementY !== 0) {
-                var lastCell;
-                if (player.nextMoves.length > 0)
-                    lastCell = player.nextMoves[player.nextMoves.length - 1];
-                else
-                    lastCell = {x: player.cellX, y: player.cellY, occupiedBy: undefined, type: undefined};
-                if (lastCell.occupiedBy === undefined || lastCell.type === "exit") { // TODO: fix microbug here on level end
-                    var newCell = {
-                        x: lastCell.x + movementX,
-                        y: lastCell.y + movementY,
-                        occupiedBy: undefined,
-                        type: undefined
-                    };
-                    var newCellIndex = newCell.x + "_" + newCell.y;
-                    if (state.level.index.hasOwnProperty(newCellIndex)) {
-                        var cell = state.level.index[newCellIndex];
-                        newCell.type = cell.type;
-                        if (cell.type === "ground" || cell.type === "exit") {
-                            newCell.occupiedBy = cell.occupiedBy;
-                            player.nextMoves.push(newCell);
-                        }
+
+                    state.camera.targetX = state.level.centerX;
+                    state.camera.targetY = state.level.centerY;
+                    state.camera.targetScale = 1280 / Game.config.canvasWidth;
+                    state.level.state = "move";
+                    forceEditRefresh = true;
+                } else {
+                    if (keyboardInput.up) {
+                        keyboardInput.up = false;
+                        if (state.level.swapPart === "bottom")
+                            state.level.swapPart = "middle";
+                        else if (state.level.swapPart === "middle")
+                            state.level.swapPart = "top";
+                    }
+                    if (keyboardInput.down) {
+                        keyboardInput.down = false;
+                        if (state.level.swapPart === "middle")
+                            state.level.swapPart = "bottom";
+                        else if (state.level.swapPart === "top")
+                            state.level.swapPart = "middle";
                     }
                 }
             }
-        } else if (state.level.state === "swap") {
-            if (keyboardInput.cancel) {
-                keyboardInput.cancel = false;
-                state.camera.targetX = state.level.centerX;
-                state.camera.targetY = state.level.centerY;
-                state.camera.targetScale = 1280 / Game.config.canvasWidth;
-                state.level.state = "move";
-            } else if (keyboardInput.enter) {
-                var npc = state.level.swapNpc;
 
-                var tmp = player[state.level.swapPart].color;
-                player[state.level.swapPart].color = npc[state.level.swapPart].color;
-                npc[state.level.swapPart].color = tmp;
-
-                state.level.index[npc.cellX + "_" + npc.cellY].occupiedBy = undefined;
-                state.level.index[player.cellX + "_" + player.cellY].occupiedBy = npc;
-                ["targetX", "targetY", "cellX", "cellY"].forEach(function (key) {
-                    var tmp = player[key];
-                    player[key] = npc[key];
-                    npc[key] = tmp;
-                });
-
-                state.camera.targetX = state.level.centerX;
-                state.camera.targetY = state.level.centerY;
-                state.camera.targetScale = 1280 / Game.config.canvasWidth;
-                state.level.state = "move";
-                forceEditRefresh = true;
-            } else {
-                if (keyboardInput.up) {
-                    keyboardInput.up = false;
-                    if (state.level.swapPart === "bottom")
-                        state.level.swapPart = "middle";
-                    else if (state.level.swapPart === "middle")
-                        state.level.swapPart = "top";
-                }
-                if (keyboardInput.down) {
-                    keyboardInput.down = false;
-                    if (state.level.swapPart === "middle")
-                        state.level.swapPart = "bottom";
-                    else if (state.level.swapPart === "top")
-                        state.level.swapPart = "middle";
-                }
-            }
+            for (var i = 0; i < state.npcs.length; ++i)
+                updateTriangle(state.npcs[i]);
         }
+
+        updateTriangle(state.player);
 
         function updateTriangle(triangle) {
             triangle.transform = GG.Transforms.createTRS(triangle.x, triangle.y, triangle.angle, triangle.scale);
@@ -591,10 +638,6 @@ var Game = {
             }
         }
 
-        updateTriangle(player);
-        for (var i = 0; i < state.npcs.length; ++i)
-            updateTriangle(state.npcs[i]);
-
         var camera = state.camera;
         camera.x = camera.targetX * 0.1 + camera.x * 0.9;
         camera.y = camera.targetY * 0.1 + camera.y * 0.9;
@@ -613,6 +656,7 @@ var Game = {
         }
     },
     draw: function (state) {
+        // TODO: IE doesn't support VAO, must change drawing code :(
         var gl = state.gl;
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
         gl.clearColor(state.background[0], state.background[1], state.background[2], 1);
@@ -640,99 +684,110 @@ var Game = {
             gl.uniformMatrix3fv(state.shader.uniforms.view, false, view);
             var model = new Float32Array(9);
 
-            state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
-            for (var i = 0; i < state.level.cells.length; ++i) {
-                var cell = state.level.cells[i];
-                if (cell.type == "exit") {
-                    if (cell.isOpen)
-                        gl.bindTexture(gl.TEXTURE_2D, state.textures.exit_open);
-                    else
-                        gl.bindTexture(gl.TEXTURE_2D, state.textures.exit_closed);
-                    GG.Transforms.toMat3(cell.transform, model);
-                    gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
-                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                }
-            }
-
-            state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
-            gl.bindTexture(gl.TEXTURE_2D, state.textures.ground);
-            for (i = 0; i < state.level.cells.length; ++i) {
-                cell = state.level.cells[i];
-                if (cell.type == "ground") {
-                    GG.Transforms.toMat3(cell.transform, model);
-                    gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
-                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                }
-            }
-
-            state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
-            for (i = 0; i < state.npcs.length; ++i) {
-                var npc = state.npcs[i];
-                if (!npc.isTalker)
-                    drawTriangle(npc, state.level.state === "swap" && npc == state.level.swapNpc ? state.level.swapPart : undefined);
-            }
-
-            if (state.level.state !== "win")
-                drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined);
-
-            state.vaoExtension.bindVertexArrayOES(state.meshes.quad_256);
-            gl.bindTexture(gl.TEXTURE_2D, state.textures.wall);
-            for (i = 0; i < state.level.cells.length; ++i) {
-                cell = state.level.cells[i];
-                if (cell.type == "wall") {
-                    GG.Transforms.toMat3(cell.transform, model);
-                    gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
-                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                }
-            }
-
-            state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
-            for (i = 0; i < state.npcs.length; ++i) {
-                npc = state.npcs[i];
-                if (npc.isTalker)
-                    drawTriangle(npc, undefined);
-            }
-
-            for (i = 0; i < state.npcs.length; ++i) {
-                npc = state.npcs[i];
-                if (npc.isTalker && npc.message !== undefined) {
-                    state.vaoExtension.bindVertexArrayOES(state.meshes.message);
-                    gl.bindTexture(gl.TEXTURE_2D, state.textures[npc.message.texture]);
-                    GG.Transforms.toMat3(npc.message.transform, model);
-                    gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
-                    gl.uniform4fv(state.shader.uniforms.tint, [1, 1, 1, npc.message.opacity]);
-                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                }
-            }
-
-
-            if (state.level.state === "win" || state.level.state === "load") {
-                GG.Transforms.toMat3(state.player.transform, model);
+            if (state.level.state === "intro") {
+                state.vaoExtension.bindVertexArrayOES(state.meshes.menu_text);
+                gl.bindTexture(gl.TEXTURE_2D, state.textures["menu_" + state.intro.activeMenu]);
+                gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
+                var menuTransform = GG.Transforms.createTRS(0.2 * state.level.cellSize, 0.6 * state.level.cellSize, 0, 1);
+                GG.Transforms.toMat3(menuTransform, model);
                 gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
-                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_4096);
-                if (state.level.state === "win")
-                    gl.uniform4f(state.shader.uniforms.tint, state.background[0], state.background[1], state.background[2], Math.min(1.0, state.time - state.level.winTime));
-                else
-                    gl.uniform4f(state.shader.uniforms.tint, state.background[0], state.background[1], state.background[2], 1.0 - Math.min(1.0, state.time - state.level.loadTime));
-
-                gl.bindTexture(gl.TEXTURE_2D, state.textures.fill);
                 gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                drawTriangle(state.player, state.intro.activeMenu);
+            } else {
+                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                for (var i = 0; i < state.level.cells.length; ++i) {
+                    var cell = state.level.cells[i];
+                    if (cell.type == "exit") {
+                        if (cell.isOpen)
+                            gl.bindTexture(gl.TEXTURE_2D, state.textures.exit_open);
+                        else
+                            gl.bindTexture(gl.TEXTURE_2D, state.textures.exit_closed);
+                        GG.Transforms.toMat3(cell.transform, model);
+                        gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    }
+                }
 
                 state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
-                drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined);
-            }
+                gl.bindTexture(gl.TEXTURE_2D, state.textures.ground);
+                for (i = 0; i < state.level.cells.length; ++i) {
+                    cell = state.level.cells[i];
+                    if (cell.type == "ground") {
+                        GG.Transforms.toMat3(cell.transform, model);
+                        gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    }
+                }
 
-            if (state.editable) {
-                var transform = GG.Transforms.createTRS(
-                    -0.5 * Game.config.canvasWidth * camera.scale + camera.x,
-                    0.5 * Game.config.canvasHeight * camera.scale + camera.y, 0, camera.scale);
+                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                for (i = 0; i < state.npcs.length; ++i) {
+                    var npc = state.npcs[i];
+                    if (!npc.isTalker)
+                        drawTriangle(npc, state.level.state === "swap" && npc == state.level.swapNpc ? state.level.swapPart : undefined);
+                }
 
-                GG.Transforms.toMat3(transform, model);
-                gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
-                state.vaoExtension.bindVertexArrayOES(state.meshes.edit_mode);
-                gl.bindTexture(gl.TEXTURE_2D, state.textures.edit_mode);
-                gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
-                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                if (state.level.state !== "win")
+                    drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined);
+
+                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_256);
+                gl.bindTexture(gl.TEXTURE_2D, state.textures.wall);
+                for (i = 0; i < state.level.cells.length; ++i) {
+                    cell = state.level.cells[i];
+                    if (cell.type == "wall") {
+                        GG.Transforms.toMat3(cell.transform, model);
+                        gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    }
+                }
+
+                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                for (i = 0; i < state.npcs.length; ++i) {
+                    npc = state.npcs[i];
+                    if (npc.isTalker)
+                        drawTriangle(npc, undefined);
+                }
+
+                for (i = 0; i < state.npcs.length; ++i) {
+                    npc = state.npcs[i];
+                    if (npc.isTalker && npc.message !== undefined) {
+                        state.vaoExtension.bindVertexArrayOES(state.meshes.message);
+                        gl.bindTexture(gl.TEXTURE_2D, state.textures[npc.message.texture]);
+                        GG.Transforms.toMat3(npc.message.transform, model);
+                        gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                        gl.uniform4fv(state.shader.uniforms.tint, [1, 1, 1, npc.message.opacity]);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    }
+                }
+
+                if (state.level.state === "win" || state.level.state === "load") {
+                    GG.Transforms.toMat3(state.player.transform, model);
+                    gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                    state.vaoExtension.bindVertexArrayOES(state.meshes.quad_4096);
+                    if (state.level.state === "win")
+                        gl.uniform4f(state.shader.uniforms.tint, state.background[0], state.background[1], state.background[2], Math.min(1.0, state.time - state.level.winTime));
+                    else
+                        gl.uniform4f(state.shader.uniforms.tint, state.background[0], state.background[1], state.background[2], 1.0 - Math.min(1.0, state.time - state.level.loadTime));
+
+                    gl.bindTexture(gl.TEXTURE_2D, state.textures.fill);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+                    state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                    drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined);
+                }
+
+                if (state.editable) {
+                    var transform = GG.Transforms.createTRS(
+                        -0.5 * Game.config.canvasWidth * camera.scale + camera.x,
+                        0.5 * Game.config.canvasHeight * camera.scale + camera.y, 0, camera.scale);
+
+                    GG.Transforms.toMat3(transform, model);
+                    gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                    state.vaoExtension.bindVertexArrayOES(state.meshes.edit_mode);
+                    gl.bindTexture(gl.TEXTURE_2D, state.textures.edit_mode);
+                    gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                }
             }
         }
 
