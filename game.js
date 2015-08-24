@@ -116,6 +116,7 @@ var Game = {
 
         var state = {
             gl: gl,
+            audio: GG.Sounds.getContext(),
             vaoExtension: gl.getExtension("OES_vertex_array_object"),
             shader: {
                 program: undefined,
@@ -156,6 +157,12 @@ var Game = {
                 menu_middle: undefined,
                 menu_top: undefined,
                 background: undefined
+            },
+            sounds: {
+                fall: undefined,
+                swap: undefined,
+                walk: undefined,
+                win: undefined
             },
             time: 0,
             background: [0.369, 0.314, 0.38],
@@ -222,6 +229,12 @@ var Game = {
         Object.keys(state.textures).forEach(function (textureName) {
             GG.Textures.loadImage(gl, "textures/" + textureName + ".png", function (texture) {
                 state.textures[textureName] = texture;
+            });
+        });
+
+        Object.keys(state.sounds).forEach(function (soundName) {
+            GG.Sounds.loadSound(state.audio, "sounds/" + soundName + ".wav", function (sound) {
+                state.sounds[soundName] = sound;
             });
         });
 
@@ -475,11 +488,6 @@ var Game = {
                     state.camera.targetX = state.player.x - 0.7 * state.level.cellSize;
                     state.camera.targetY = state.player.y + 0.5 * state.level.cellSize;
                     state.camera.targetScale = 512 / Game.config.canvasWidth;
-                    /*
-                    state.camera.x =state.camera.targetX;
-                    state.camera.y =state.camera.targetY;
-                    state.camera.scale = state.camera.targetScale;
-                    */
                     state.intro.wasActive = true;
                     state.intro.introTime = state.time;
                 } else {
@@ -519,6 +527,7 @@ var Game = {
                         state.camera.targetY = player.y;
                         state.camera.targetScale = 512 / Game.config.canvasWidth;
                         state.level.winTime = state.time;
+                        GG.Sounds.playSound(state.audio, state.sounds.win);
                     }
 
                     state.npcs.forEach(function (npc) {
@@ -538,6 +547,9 @@ var Game = {
                         } else {
                             player.isDead = true;
                             player.deadTime = state.time;
+                            setTimeout(function() {
+                                GG.Sounds.playSound(state.audio, state.sounds.fall);
+                            }, 200);
                         }
                     } else {
                         var neighbors = [
@@ -584,6 +596,7 @@ var Game = {
                                     state.level.swapNpc = nextMove.occupiedBy;
                                 }
                             } else {
+                                GG.Sounds.playSound(state.audio, state.sounds.walk);
                                 if (currentCell.type === "trap")
                                     currentCell.isOpen = true;
                                 var nextCell = state.level.index[nextMove.x + "_" + nextMove.y];
@@ -668,6 +681,7 @@ var Game = {
                     state.camera.targetScale = 1280 / Game.config.canvasWidth;
                     state.level.state = "move";
                 } else if (keyboardInput.enter) {
+                    GG.Sounds.playSound(state.audio, state.sounds.swap);
                     var npc = state.level.swapNpc;
 
                     var tmp = player[state.level.swapPart].color;
@@ -687,11 +701,17 @@ var Game = {
                         npcCell.isOpen = true;
                         player.isDead = true;
                         player.deadTime = state.time;
+                        setTimeout(function() {
+                            GG.Sounds.playSound(state.audio, state.sounds.fall);
+                        }, 200);
                     }
                     if (playerCell.type === "trap") {
                         playerCell.isOpen = true;
                         npc.isDead = true;
                         npc.deadTime = state.time;
+                        setTimeout(function() {
+                            GG.Sounds.playSound(state.audio, state.sounds.fall);
+                        }, 200);
                     }
 
                     state.camera.targetX = state.level.centerX;
@@ -981,7 +1001,7 @@ var Game = {
 
             GG.Transforms.toMat3(triangle.eyeCenter.transform, model);
             gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
-            gl.uniform4fv(state.shader.uniforms.tint, triangle.isDead ? [0, 0, 0, 1] : [1, 1, 1, 1]);
+            gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
             if (isPlayer)
                 gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_eye_center);
             else

@@ -13,12 +13,14 @@ GG.Sounds = {
         }, onError);
     },
     playSound: function (audioContext, buffer) {
-        var source = audioContext.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audioContext.destination);
-        if ("start" in source)
-            source.start(0);
-        else if ("noteOn" in source)
-            source.noteOn(0);
+        if (buffer !== undefined) {
+            var source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            if ("start" in source)
+                source.start(0);
+            else if ("noteOn" in source)
+                source.noteOn(0);
+        }
     }
 };
