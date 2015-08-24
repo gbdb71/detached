@@ -47,6 +47,8 @@ var Game = {
             targetX: x, targetY: y,
             nextMoves: [],
             isTalker: isTalker,
+            isDead: false,
+            deadTime: 0,
             message: message !== undefined ? {
                 texture: "message_" + message,
                 x: -0.2 * state.level.cellSize,
@@ -136,6 +138,8 @@ var Game = {
                 wall: undefined,
                 exit_closed: undefined,
                 exit_open: undefined,
+                trap_closed: undefined,
+                trap_open: undefined,
                 triangle_shadow: undefined,
                 triangle_eye: undefined,
                 triangle_eye_center: undefined,
@@ -150,7 +154,8 @@ var Game = {
                 edit_mode: undefined,
                 menu_bottom: undefined,
                 menu_middle: undefined,
-                menu_top: undefined
+                menu_top: undefined,
+                background: undefined
             },
             time: 0,
             background: [0.369, 0.314, 0.38],
@@ -206,6 +211,7 @@ var Game = {
             });
             state.meshes.quad_128 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128);
             state.meshes.quad_256 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 256, 256);
+            state.meshes.quad_1024 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 1024, 1024);
             state.meshes.quad_4096 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 4096, 4096);
             state.meshes.message = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128, 0, 1);
             state.meshes.edit_mode = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128, 1, 0);
@@ -260,7 +266,7 @@ var Game = {
             cellX: x,
             cellY: y,
             occupiedBy: undefined,
-            isOpen: true
+            isOpen: type === "exit"
         };
         cell.transform = GG.Transforms.createTRS(cell.x, cell.y, cell.angle, cell.scale);
         return cell;
@@ -286,6 +292,10 @@ var Game = {
         state.player.y = (definition.player.y + 0.5) * state.level.cellSize;
         state.player.targetX = state.player.x;
         state.player.targetY = state.player.y;
+        state.player.scale = 1;
+        state.player.angle = 0;
+        state.player.isDead = false;
+        state.player.nextMoves = [];
         if (isReload) {
             state.player.bottom.color = state.player.bottom.resetColor;
             state.player.middle.color = state.player.middle.resetColor;
@@ -375,7 +385,9 @@ var Game = {
                     } else {
                         if (cell.type === "ground")
                             cell.type = "ice";
-                        else if (cell.type == "ice")
+                        else if (cell.type === "ice")
+                            cell.type = "trap";
+                        else if (cell.type === "trap")
                             cell.type = "wall";
                         else if (cell.type === "wall" || cell.type === "exit") {
                             for (var i = 0; i < state.level.cells.length; ++i) {
@@ -492,6 +504,7 @@ var Game = {
                         state.camera.targetScale = 512 / Game.config.canvasWidth;
                         state.level.winTime = state.time;
                     }
+
                     state.npcs.forEach(function (npc) {
                         if (npc.message !== undefined) {
                             npc.message.targetOpacity = 0;
@@ -499,66 +512,82 @@ var Game = {
                                 npc.message.scale = 0;
                         }
                     });
-                    var neighbors = [
-                        {x: player.cellX - 1, y: player.cellY},
-                        {x: player.cellX + 1, y: player.cellY},
-                        {x: player.cellX, y: player.cellY - 1},
-                        {x: player.cellX, y: player.cellY + 1}
-                    ];
-                    var isNearExit = false;
-                    neighbors.forEach(function (neighbor) {
-                        var cellIndex = neighbor.x + "_" + neighbor.y;
-                        if (cellIndex in state.level.index) {
-                            var cell = state.level.index[cellIndex];
-                            if (cell.type === "exit") {
-                                isNearExit = true;
-                                state.camera.targetX = state.level.centerX * 0.9 + player.x * 0.1;
-                                state.camera.targetY = state.level.centerY * 0.9 + player.y * 0.1;
-                                state.camera.targetScale = 1280 / Game.config.canvasWidth;
-                                if (cell.isOpen) {
-                                    if (player.bottom.color !== player.middle.color || player.middle.color !== player.top.color)
-                                        cell.isOpen = false;
-                                }
-                            } else if (cell.occupiedBy !== undefined && cell.occupiedBy.message !== undefined) {
-                                cell.occupiedBy.message.targetScale = 1;
-                                cell.occupiedBy.message.targetOpacity = 1;
-                            }
-                        }
-                    });
-                    if (!isNearExit && state.level.state === "move") {
-                        state.camera.targetX = state.level.centerX;
-                        state.camera.targetY = state.level.centerY;
-                        state.camera.targetScale = 1280 / Game.config.canvasWidth;
-                    }
-                    if (player.nextMoves.length > 0) {
-                        var nextMove = player.nextMoves[0];
-                        var nextX = (nextMove.x + 0.5) * state.level.cellSize;
-                        var nextY = (nextMove.y + 0.5) * state.level.cellSize;
-                        if (nextMove.occupiedBy !== undefined) {
-                            if (!nextMove.occupiedBy.isTalker) {
-                                state.camera.targetX = 0.5 * (player.x + nextX);
-                                state.camera.targetY = 0.5 * (player.y + nextY);
-                                state.camera.targetScale = 700 / Game.config.canvasWidth;
-                                state.level.state = "swap";
-                                state.level.swapNpc = nextMove.occupiedBy;
-                            }
-                        } else {
-                            var isMovingOntoExit = nextMove.type === "exit" && state.level.index[nextMove.x + "_" + nextMove.y].isOpen;
-                            if (nextMove.type === "ground" || nextMove.type === "ice" || (isMovingOntoExit && !state.editable)) {
-                                forceEditRefresh = true;
-                                player.cellX = nextMove.x;
-                                player.cellY = nextMove.y;
-                                player.targetX = nextX;
-                                player.targetY = nextY;
-                            }
-                        }
-                        player.nextMoves.splice(0, 1);
 
-                        state.level.cells.forEach(function (cell) {
-                            if (cell.type === "exit" && !cell.isOpen) {
-                                cell.isOpen = true;
+                    var currentCellIndex = player.cellX + "_" + player.cellY;
+                    var currentCell = state.level.index[currentCellIndex];
+                    if (currentCell.type == "trap" && currentCell.isOpen) {
+                        if (player.isDead) {
+                            if (state.time - player.deadTime  > 1.4)
+                                Game.loadLevel(state, true);
+                        } else {
+                            player.isDead = true;
+                            player.deadTime = state.time;
+                        }
+                    } else {
+                        var neighbors = [
+                            {x: player.cellX - 1, y: player.cellY},
+                            {x: player.cellX + 1, y: player.cellY},
+                            {x: player.cellX, y: player.cellY - 1},
+                            {x: player.cellX, y: player.cellY + 1}
+                        ];
+                        var isNearExit = false;
+                        neighbors.forEach(function (neighbor) {
+                            var cellIndex = neighbor.x + "_" + neighbor.y;
+                            if (cellIndex in state.level.index) {
+                                var cell = state.level.index[cellIndex];
+                                if (cell.type === "exit") {
+                                    isNearExit = true;
+                                    state.camera.targetX = state.level.centerX * 0.9 + player.x * 0.1;
+                                    state.camera.targetY = state.level.centerY * 0.9 + player.y * 0.1;
+                                    state.camera.targetScale = 1280 / Game.config.canvasWidth;
+                                    if (cell.isOpen) {
+                                        if (player.bottom.color !== player.middle.color || player.middle.color !== player.top.color)
+                                            cell.isOpen = false;
+                                    }
+                                } else if (cell.occupiedBy !== undefined && cell.occupiedBy.message !== undefined) {
+                                    cell.occupiedBy.message.targetScale = 1;
+                                    cell.occupiedBy.message.targetOpacity = 1;
+                                }
                             }
                         });
+                        if (!isNearExit && state.level.state === "move") {
+                            state.camera.targetX = state.level.centerX;
+                            state.camera.targetY = state.level.centerY;
+                            state.camera.targetScale = 1280 / Game.config.canvasWidth;
+                        }
+                        if (player.nextMoves.length > 0) {
+                            var nextMove = player.nextMoves[0];
+                            var nextX = (nextMove.x + 0.5) * state.level.cellSize;
+                            var nextY = (nextMove.y + 0.5) * state.level.cellSize;
+                            if (nextMove.occupiedBy !== undefined && !nextMove.occupiedBy.isDead) {
+                                if (!nextMove.occupiedBy.isTalker && !nextMove.occupiedBy.isDead) {
+                                    state.camera.targetX = 0.5 * (player.x + nextX);
+                                    state.camera.targetY = 0.5 * (player.y + nextY);
+                                    state.camera.targetScale = 700 / Game.config.canvasWidth;
+                                    state.level.state = "swap";
+                                    state.level.swapNpc = nextMove.occupiedBy;
+                                }
+                            } else {
+                                if (currentCell.type === "trap")
+                                    currentCell.isOpen = true;
+                                var nextCell = state.level.index[nextMove.x + "_" + nextMove.y];
+                                var isMovingOntoExit = nextMove.type === "exit" && nextCell.isOpen;
+                                if (nextMove.type === "ground" || nextMove.type === "trap" || nextMove.type === "ice" || (isMovingOntoExit && !state.editable)) {
+                                    forceEditRefresh = true;
+                                    player.cellX = nextMove.x;
+                                    player.cellY = nextMove.y;
+                                    player.targetX = nextX;
+                                    player.targetY = nextY;
+                                }
+                            }
+                            player.nextMoves.splice(0, 1);
+
+                            state.level.cells.forEach(function (cell) {
+                                if (cell.type === "exit" && !cell.isOpen) {
+                                    cell.isOpen = true;
+                                }
+                            });
+                        }
                     }
                 }
             }
@@ -604,7 +633,7 @@ var Game = {
                             if (state.level.index.hasOwnProperty(newCellIndex)) {
                                 cell = state.level.index[newCellIndex];
                                 newCell.type = cell.type;
-                                if (cell.type === "ground" || cell.type === "exit" || (cell.type === "ice" && (!cell.occupiedBy || isFirstOfSlide)))  {
+                                if (cell.type === "ground" || cell.type === "exit" || cell.type === "trap" || (cell.type === "ice" && (!cell.occupiedBy || isFirstOfSlide)))  {
                                     newCell.occupiedBy = cell.occupiedBy;
                                     player.nextMoves.push(newCell);
                                 } else {
@@ -629,13 +658,25 @@ var Game = {
                     player[state.level.swapPart].color = npc[state.level.swapPart].color;
                     npc[state.level.swapPart].color = tmp;
 
-                    state.level.index[npc.cellX + "_" + npc.cellY].occupiedBy = undefined;
-                    state.level.index[player.cellX + "_" + player.cellY].occupiedBy = npc;
+                    var npcCell = state.level.index[npc.cellX + "_" + npc.cellY];
+                    var playerCell = state.level.index[player.cellX + "_" + player.cellY];
+                    npcCell.occupiedBy = undefined;
+                    playerCell.occupiedBy = npc;
                     ["targetX", "targetY", "cellX", "cellY"].forEach(function (key) {
                         var tmp = player[key];
                         player[key] = npc[key];
                         npc[key] = tmp;
                     });
+                    if (npcCell.type === "trap") {
+                        npcCell.isOpen = true;
+                        player.isDead = true;
+                        player.deadTime = state.time;
+                    }
+                    if (playerCell.type === "trap") {
+                        playerCell.isOpen = true;
+                        npc.isDead = true;
+                        npc.deadTime = state.time;
+                    }
 
                     state.camera.targetX = state.level.centerX;
                     state.camera.targetY = state.level.centerY;
@@ -671,8 +712,13 @@ var Game = {
                 triangle.eyeCenter.targetX = triangle.eyeCenter.baseX + Math.random() * 8 - 4;
                 triangle.eyeCenter.targetY = triangle.eyeCenter.baseY + Math.random() * 8 - 4;
             }
-            triangle.eyeCenter.x = triangle.eyeCenter.targetX * 0.1 + triangle.eyeCenter.x * 0.9;
-            triangle.eyeCenter.y = triangle.eyeCenter.targetY * 0.1 + triangle.eyeCenter.y * 0.9;
+            if (triangle.isDead && state.time - triangle.deadTime > 0.2) {
+                triangle.angle += 0.01;
+                triangle.scale *= 0.99;
+            } else {
+                triangle.eyeCenter.x = triangle.eyeCenter.targetX * 0.1 + triangle.eyeCenter.x * 0.9;
+                triangle.eyeCenter.y = triangle.eyeCenter.targetY * 0.1 + triangle.eyeCenter.y * 0.9;
+            }
 
             triangle.transform = GG.Transforms.createTRS(triangle.x, triangle.y, triangle.angle, triangle.scale);
             triangle.shadow.transform = GG.Transforms.multiply(
@@ -749,6 +795,14 @@ var Game = {
             gl.uniformMatrix3fv(state.shader.uniforms.view, false, view);
             var model = new Float32Array(9);
 
+            var bcakgroundTransform = GG.Transforms.createTRS(camera.x, camera.y, 0, camera.scale);
+            GG.Transforms.toMat3(bcakgroundTransform, model);
+            gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+            state.vaoExtension.bindVertexArrayOES(state.meshes.quad_1024);
+            gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
+            gl.bindTexture(gl.TEXTURE_2D, state.textures.background);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
             if (state.level.state === "intro") {
                 state.vaoExtension.bindVertexArrayOES(state.meshes.menu_text);
                 gl.bindTexture(gl.TEXTURE_2D, state.textures["menu_" + state.intro.activeMenu]);
@@ -790,6 +844,28 @@ var Game = {
                 for (i = 0; i < state.level.cells.length; ++i) {
                     cell = state.level.cells[i];
                     if (cell.type == "ice") {
+                        GG.Transforms.toMat3(cell.transform, model);
+                        gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    }
+                }
+
+                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                gl.bindTexture(gl.TEXTURE_2D, state.textures.trap_closed);
+                for (i = 0; i < state.level.cells.length; ++i) {
+                    cell = state.level.cells[i];
+                    if (cell.type == "trap" && !cell.isOpen) {
+                        GG.Transforms.toMat3(cell.transform, model);
+                        gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    }
+                }
+
+                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                gl.bindTexture(gl.TEXTURE_2D, state.textures.trap_open);
+                for (i = 0; i < state.level.cells.length; ++i) {
+                    cell = state.level.cells[i];
+                    if (cell.type == "trap" && cell.isOpen) {
                         GG.Transforms.toMat3(cell.transform, model);
                         gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
                         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -886,7 +962,7 @@ var Game = {
 
             GG.Transforms.toMat3(triangle.eyeCenter.transform, model);
             gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
-            gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
+            gl.uniform4fv(state.shader.uniforms.tint, triangle.isDead ? [0, 0, 0, 1] : [1, 1, 1, 1]);
             if (isPlayer)
                 gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_eye_center);
             else
@@ -898,7 +974,7 @@ var Game = {
             if (highlightedPart === "bottom")
                 gl.uniform4fv(state.shader.uniforms.tint, Game.lerp4(bottomColor, [1, 1, 1, 1], 0.5 + 0.25 * Math.sin(8 * state.time)));
             else
-                gl.uniform4fv(state.shader.uniforms.tint, bottomColor);
+                gl.uniform4fv(state.shader.uniforms.tint, triangle.isDead ? Game.lerp4(bottomColor, [0, 0, 0, 1], state.time - triangle.deadTime) : bottomColor);
             gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_bottom_mask);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
             gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
@@ -910,7 +986,7 @@ var Game = {
             if (highlightedPart === "middle")
                 gl.uniform4fv(state.shader.uniforms.tint, Game.lerp4(middleColor, [1, 1, 1, 1], 0.5 + 0.25 * Math.sin(8 * state.time)));
             else
-                gl.uniform4fv(state.shader.uniforms.tint, middleColor);
+                gl.uniform4fv(state.shader.uniforms.tint, triangle.isDead ? Game.lerp4(middleColor, [0, 0, 0, 1], state.time - triangle.deadTime) : middleColor);
             gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_middle_mask);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
             gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
@@ -922,7 +998,7 @@ var Game = {
             if (highlightedPart === "top")
                 gl.uniform4fv(state.shader.uniforms.tint, Game.lerp4(topColor, [1, 1, 1, 1], 0.5 + 0.25 * Math.sin(8 * state.time)));
             else
-                gl.uniform4fv(state.shader.uniforms.tint, topColor);
+                gl.uniform4fv(state.shader.uniforms.tint, triangle.isDead ? Game.lerp4(topColor, [0, 0, 0, 1], state.time - triangle.deadTime) : topColor);
             gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_top_mask);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
             gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
