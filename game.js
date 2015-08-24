@@ -118,6 +118,7 @@ var Game = {
             gl: gl,
             audio: GG.Sounds.getContext(),
             vaoExtension: gl.getExtension("OES_vertex_array_object"),
+            loadLock: 0,
             shader: {
                 program: undefined,
                 attributes: {
@@ -209,7 +210,9 @@ var Game = {
         state.camera.y = state.camera.targetY;
         state.camera.scale = state.camera.targetScale;
 
+        state.loadLock += 1;
         GG.Shaders.loadProgram(gl, "shaders/fragment.glsl", "shaders/vertex.glsl", function (program) {
+            state.loadLock -= 1;
             state.shader.program = program;
             Object.keys(state.shader.attributes).forEach(function (key) {
                 state.shader.attributes[key] = state.gl.getAttribLocation(program, key);
@@ -227,8 +230,13 @@ var Game = {
         });
 
         Object.keys(state.textures).forEach(function (textureName) {
+            state.loadLock += 1;
             GG.Textures.loadImage(gl, "textures/" + textureName + ".png", function (texture) {
                 state.textures[textureName] = texture;
+                state.loadLock -= 1;
+            }, function (error) {
+                state.loadLock -= 1;
+                console.error(error);
             });
         });
 
@@ -452,6 +460,9 @@ var Game = {
         }
     },
     tick: function (state, frameTime, keyboardInput, mouseInput) {
+        if (state.loadLock > 0)
+            return;
+
         state.time += frameTime;
 
         var forceEditRefresh = false;
@@ -811,6 +822,8 @@ var Game = {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.clear(gl.COLOR_BUFFER_BIT);
+        if (state.loadLock > 0)
+            return;
 
         if (state.shader.program !== undefined) {
             gl.useProgram(state.shader.program);
