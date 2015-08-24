@@ -38,7 +38,6 @@ var Game = {
         var x = (cellX + 0.5) * state.level.cellSize;
         var y = (cellY + 0.5) * state.level.cellSize;
         if (isTalker) {
-            x -= 0.1 * state.level.cellSize;
             y += 0.2 * state.level.cellSize;
         }
         var triangle = {
@@ -60,20 +59,37 @@ var Game = {
                 transform: undefined,
                 name: message
             } : undefined,
+            shadow: {
+                x: 2, y: -29.5 + 8, angle: 0, scale: 1,
+                transform: undefined
+            },
+            eye: {
+                x: 0, y: 8, angle: 0, scale: 1,
+                transform: undefined
+            },
+            eyeCenter: {
+                x: 0, y: 8, angle: 0, scale: 1,
+                baseX: 0, baseY: 8,
+                targetX: 0, targetY: 8,
+                transform: undefined
+            },
             bottom: {
-                x: 0, y: -31 + 8, angle: Game.random(-0.03, 0.03), scale: 1,
+                x: 2, y: -21.5, angle: 0, scale: 1,
+                baseX: 2, baseY: -21.5,
                 transform: undefined,
                 color: bottomColor,
                 resetColor: bottomColor
             },
             middle: {
-                x: 0, y: 8, angle: Game.random(-0.05, 0.05), scale: 1,
+                x: 0, y: 8, angle: 0, scale: 1,
+                baseX: 0, baseY: 8,
                 transform: undefined,
                 color: middleColor,
                 resetColor: middleColor
             },
             top: {
-                x: 0, y: 35 + 8, angle: Game.random(-0.07, 0.07), scale: 1,
+                x: 2, y: 37.5, angle: 0, scale: 1,
+                baseX: 2, baseY: 37.5,
                 transform: undefined,
                 color: topColor,
                 resetColor: topColor
@@ -119,6 +135,10 @@ var Game = {
                 wall: undefined,
                 exit_closed: undefined,
                 exit_open: undefined,
+                triangle_shadow: undefined,
+                triangle_eye: undefined,
+                triangle_eye_center: undefined,
+                triangle_eye_center_npc: undefined,
                 triangle_bottom_mask: undefined,
                 triangle_middle_mask: undefined,
                 triangle_top_mask: undefined,
@@ -132,7 +152,7 @@ var Game = {
                 menu_top: undefined
             },
             time: 0,
-            background: [0.15, 0.03, 0.16],
+            background: [0.369, 0.314, 0.38],
             camera: {
                 x: 0, y: 0, angle: 0, scale: 512 / Game.config.canvasWidth,
                 targetX: 0, targetY: 0, targetScale: 512 / Game.config.canvasWidth
@@ -153,9 +173,11 @@ var Game = {
             player: undefined,
             npcs: [],
             colors: {
-                red: [0.6, 0.1, 0.1, 1.0],
-                green: [0.2, 0.7, 0.1, 1.0],
-                blue: [0.2, 0.4, 0.7, 1.0]
+                red: [0.36, 0.1, 0.1, 1.0],
+                green: [0.43, 0.48, 0.13, 1.0],
+                blue: [0.18, 0.26, 0.39, 1.0],
+                orange: [0.75, 0.36, 0, 1],
+                magenta: [0.55, 0.21, 0.48, 1.0]
             },
             editable: false,
             intro: {
@@ -635,7 +657,23 @@ var Game = {
         updateTriangle(state.player);
 
         function updateTriangle(triangle) {
+            if (Math.random() > 0.995) {
+                triangle.eyeCenter.targetX = triangle.eyeCenter.baseX + Math.random() * 8 - 4;
+                triangle.eyeCenter.targetY =  triangle.eyeCenter.baseY + Math.random() * 8 - 4;
+            }
+            triangle.eyeCenter.x  = triangle.eyeCenter.targetX * 0.1 + triangle.eyeCenter.x * 0.9;
+            triangle.eyeCenter.y  = triangle.eyeCenter.targetY * 0.1 + triangle.eyeCenter.y * 0.9;
+
             triangle.transform = GG.Transforms.createTRS(triangle.x, triangle.y, triangle.angle, triangle.scale);
+            triangle.shadow.transform = GG.Transforms.multiply(
+                triangle.transform,
+                GG.Transforms.createTRS(triangle.shadow.x, triangle.shadow.y, triangle.shadow.angle, triangle.shadow.scale));
+            triangle.eye.transform = GG.Transforms.multiply(
+                triangle.transform,
+                GG.Transforms.createTRS(triangle.eye.x, triangle.eye.y, triangle.eye.angle, triangle.eye.scale));
+            triangle.eyeCenter.transform = GG.Transforms.multiply(
+                triangle.transform,
+                GG.Transforms.createTRS(triangle.eyeCenter.x, triangle.eyeCenter.y, triangle.eyeCenter.angle, triangle.eyeCenter.scale));
             triangle.bottom.transform = GG.Transforms.multiply(
                 triangle.transform,
                 GG.Transforms.createTRS(triangle.bottom.x, triangle.bottom.y, triangle.bottom.angle, triangle.bottom.scale));
@@ -710,7 +748,7 @@ var Game = {
                 gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
                 gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
                 state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
-                drawTriangle(state.player, state.intro.activeMenu);
+                drawTriangle(state.player, state.intro.activeMenu, true);
             } else {
                 state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
                 for (var i = 0; i < state.level.cells.length; ++i) {
@@ -741,11 +779,11 @@ var Game = {
                 for (i = 0; i < state.npcs.length; ++i) {
                     var npc = state.npcs[i];
                     if (!npc.isTalker)
-                        drawTriangle(npc, state.level.state === "swap" && npc == state.level.swapNpc ? state.level.swapPart : undefined);
+                        drawTriangle(npc, state.level.state === "swap" && npc == state.level.swapNpc ? state.level.swapPart : undefined, false);
                 }
 
                 if (state.level.state !== "win")
-                    drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined);
+                    drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined, true);
 
                 state.vaoExtension.bindVertexArrayOES(state.meshes.quad_256);
                 gl.bindTexture(gl.TEXTURE_2D, state.textures.wall);
@@ -762,7 +800,7 @@ var Game = {
                 for (i = 0; i < state.npcs.length; ++i) {
                     npc = state.npcs[i];
                     if (npc.isTalker)
-                        drawTriangle(npc, undefined);
+                        drawTriangle(npc, undefined, false);
                 }
 
                 for (i = 0; i < state.npcs.length; ++i) {
@@ -790,7 +828,7 @@ var Game = {
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
                     state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
-                    drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined);
+                    drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined, true);
                 }
 
                 if (state.editable) {
@@ -808,10 +846,31 @@ var Game = {
             }
         }
 
-        function drawTriangle(triangle, highlightedPart) {
+        function drawTriangle(triangle, highlightedPart, isPlayer) {
             var bottomColor = state.colors[triangle.bottom.color];
             var middleColor = state.colors[triangle.middle.color];
             var topColor = state.colors[triangle.top.color];
+
+            GG.Transforms.toMat3(triangle.shadow.transform, model);
+            gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+            gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
+            gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_shadow);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+            GG.Transforms.toMat3(triangle.eye.transform, model);
+            gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+            gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
+            gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_eye);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+            GG.Transforms.toMat3(triangle.eyeCenter.transform, model);
+            gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+            gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
+            if (isPlayer)
+                gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_eye_center);
+            else
+                gl.bindTexture(gl.TEXTURE_2D, state.textures.triangle_eye_center_npc);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
             GG.Transforms.toMat3(triangle.bottom.transform, model);
             gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);

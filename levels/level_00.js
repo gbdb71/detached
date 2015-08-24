@@ -18,6 +18,6 @@ Game.Levels.push({
         x: 7, y: 0, expectedColor: "red"
     },
     npcs: [
-        {x: 3, y: 1, bottom: "blue", middle: "green", top: "blue", isTalker: true, message: "good_luck"}
+        {x: 3, y: 1, bottom: "blue", middle: "magenta", top: "orange", isTalker: true, message: "good_luck"}
     ]
 });
