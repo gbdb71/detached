@@ -256,12 +256,6 @@ var Game = {
 
         Game.indexLevel(state);
 
-        state.npcs = [];
-        definition.npcs.forEach(function (npcDefinition) {
-            state.npcs.push(Game.makeTriangle(npcDefinition.x, npcDefinition.y, npcDefinition.bottom, npcDefinition.middle, npcDefinition.top,
-                npcDefinition.isTalker, npcDefinition.message, state, true));
-        });
-
         var previousPlayerX = state.player.x;
         var previousPlayerY = state.player.y;
         state.player.cellX = definition.player.x;
@@ -279,6 +273,29 @@ var Game = {
             state.player.middle.resetColor = state.player.middle.color;
             state.player.top.resetColor = state.player.top.color;
         }
+
+        state.npcs = [];
+        definition.npcs.forEach(function (npcDefinition) {
+            var bottom = npcDefinition.bottom;
+            var middle = npcDefinition.middle;
+            var top = npcDefinition.top;
+            if (state.player.top.color !== definition.player.expectedColor) {
+                if (bottom == state.player.top.color)
+                    bottom = definition.player.expectedColor;
+                else if (bottom == definition.player.expectedColor)
+                    bottom = state.player.top.color;
+                if (middle == state.player.top.color)
+                    middle = definition.player.expectedColor;
+                else if (middle == definition.player.expectedColor)
+                    middle = state.player.top.color;
+                if (top == state.player.top.color)
+                    top = definition.player.expectedColor;
+                else if (top == definition.player.expectedColor)
+                    top = state.player.top.color;
+            }
+            state.npcs.push(Game.makeTriangle(npcDefinition.x, npcDefinition.y, bottom, middle, top,
+                npcDefinition.isTalker, npcDefinition.message, state, true));
+        });
 
         state.camera.targetX = state.player.x;
         state.camera.targetY = state.player.y;

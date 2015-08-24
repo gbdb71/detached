@@ -18,7 +18,7 @@ Game.Levels.push({
         {x: 5, y: 1, type: "ground"}
     ],
     player: {
-        x: 7, y: 0
+        x: 7, y: 0, expectedColor: "red"
     },
     npcs: [
         {x: 6, y: 0, bottom: "blue", middle: "green", top: "blue"},

@@ -15,7 +15,7 @@ Game.Levels.push({
         {x: 3, y: 1, type: "wall"}
     ],
     player: {
-        x: 7, y: 0
+        x: 7, y: 0, expectedColor: "red"
     },
     npcs: [
         {x: 3, y: 1, bottom: "blue", middle: "green", top: "blue", isTalker: true, message: "good_luck"}
