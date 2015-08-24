@@ -189,7 +189,8 @@ var Game = {
             editable: false,
             intro: {
                 activeMenu: "top",
-                wasActive: true
+                wasActive: true,
+                introTime: 0
             }
         };
 
@@ -468,7 +469,22 @@ var Game = {
             if (state.level.state === "win" && (state.time - state.level.winTime) > 1) {
                 state.level.nextLevel = (state.level.nextLevel + 1) % Game.Levels.length;
                 GG.Cookies.set("detached_level", state.level.nextLevel);
-                Game.loadLevel(state, false);
+                if (state.level.nextLevel == 0) {
+                    state.level.state = "intro";
+                    state.player = Game.makeTriangle(state.player.cellX, state.player.cellY, state.player.top.color, state.player.top.color, state.player.top.color, false, undefined, state, false);
+                    state.camera.targetX = state.player.x - 0.7 * state.level.cellSize;
+                    state.camera.targetY = state.player.y + 0.5 * state.level.cellSize;
+                    state.camera.targetScale = 512 / Game.config.canvasWidth;
+                    /*
+                    state.camera.x =state.camera.targetX;
+                    state.camera.y =state.camera.targetY;
+                    state.camera.scale = state.camera.targetScale;
+                    */
+                    state.intro.wasActive = true;
+                    state.intro.introTime = state.time;
+                } else {
+                    Game.loadLevel(state, false);
+                }
             }
 
             if (state.level.state === "load" && (state.time - state.level.loadTime) > 1) {
@@ -485,14 +501,14 @@ var Game = {
                 npc.y = npc.targetY * 0.2 + npc.y * 0.8;
             });
 
-            if (state.level.state !== "win" && state.level.state !== "load") {
+            if (state.level.state !== "intro" && state.level.state !== "win" && state.level.state !== "load") {
                 if (keyboardInput.reload) {
                     keyboardInput.reload = false;
                     Game.loadLevel(state, true);
                 }
             }
 
-            if (state.level.state !== "win" && state.level.state !== "load") {
+            if (state.level.state !== "intro" && state.level.state !== "win" && state.level.state !== "load") {
                 if (Math.abs(player.x - player.targetX) < 2 && Math.abs(player.y - player.targetY) < 2) {
                     player.x = player.targetX;
                     player.y = player.targetY;
@@ -517,7 +533,7 @@ var Game = {
                     var currentCell = state.level.index[currentCellIndex];
                     if (currentCell.type == "trap" && currentCell.isOpen) {
                         if (player.isDead) {
-                            if (state.time - player.deadTime  > 1.4)
+                            if (state.time - player.deadTime > 1.4)
                                 Game.loadLevel(state, true);
                         } else {
                             player.isDead = true;
@@ -633,7 +649,7 @@ var Game = {
                             if (state.level.index.hasOwnProperty(newCellIndex)) {
                                 cell = state.level.index[newCellIndex];
                                 newCell.type = cell.type;
-                                if (cell.type === "ground" || cell.type === "exit" || cell.type === "trap" || (cell.type === "ice" && (!cell.occupiedBy || isFirstOfSlide)))  {
+                                if (cell.type === "ground" || cell.type === "exit" || cell.type === "trap" || (cell.type === "ice" && (!cell.occupiedBy || isFirstOfSlide))) {
                                     newCell.occupiedBy = cell.occupiedBy;
                                     player.nextMoves.push(newCell);
                                 } else {
@@ -799,15 +815,18 @@ var Game = {
             GG.Transforms.toMat3(bcakgroundTransform, model);
             gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
             state.vaoExtension.bindVertexArrayOES(state.meshes.quad_1024);
-            gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
+            if (state.level.state === "intro")
+                gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, Math.max(0, Math.min(1, state.time - state.intro.introTime)));
+            else
+                gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
             gl.bindTexture(gl.TEXTURE_2D, state.textures.background);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
             if (state.level.state === "intro") {
                 state.vaoExtension.bindVertexArrayOES(state.meshes.menu_text);
                 gl.bindTexture(gl.TEXTURE_2D, state.textures["menu_" + state.intro.activeMenu]);
-                gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
-                var menuTransform = GG.Transforms.createTRS(0.2 * state.level.cellSize, 0.6 * state.level.cellSize, 0, 1);
+                gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, Math.max(0, Math.min(1, state.time - state.intro.introTime)));
+                var menuTransform = GG.Transforms.createTRS(state.player.x - 0.5 *state.level.cellSize+ 0.2 * state.level.cellSize, state.player.y - 0.5 *state.level.cellSize +0.6 * state.level.cellSize, 0, 1);
                 GG.Transforms.toMat3(menuTransform, model);
                 gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
                 gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
