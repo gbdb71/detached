@@ -18,19 +18,22 @@ GG.Loop = {
             lastTimeMillisecond = time_ms;
             var ticks = 0;
             var isTooSlow = false;
-            while (unusedTimeMillisecond >= frameTimeMillisecond) {
-                if (ticks < maxTicksPerDraw) {
-                    tickFunction(state, frameTimeSecond, keyboardInput, mouseInput, wasTooSlow);
-                    mouseInput.justPressed = false;
-                    mouseInput.justReleased = false;
-                } else
-                    isTooSlow = true;
-                unusedTimeMillisecond -= frameTimeMillisecond;
-                ++ticks;
+            try {
+                while (unusedTimeMillisecond >= frameTimeMillisecond) {
+                    if (ticks < maxTicksPerDraw) {
+                        tickFunction(state, frameTimeSecond, keyboardInput, mouseInput, wasTooSlow);
+                        mouseInput.justPressed = false;
+                        mouseInput.justReleased = false;
+                    } else
+                        isTooSlow = true;
+                    unusedTimeMillisecond -= frameTimeMillisecond;
+                    ++ticks;
+                }
+                drawFunction(state, wasTooSlow);
+                wasTooSlow = isTooSlow;
+            } finally {
+                requestAnimationFrame(runLoop, element);
             }
-            drawFunction(state, wasTooSlow);
-            wasTooSlow = isTooSlow;
-            requestAnimationFrame(runLoop, element);
         }
 
         requestAnimationFrame(runLoop, element);

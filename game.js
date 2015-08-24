@@ -235,12 +235,10 @@ var Game = {
         for (var i = 0; i < state.level.cells.length; ++i) {
             var cell = state.level.cells[i];
             state.level.index[cell.cellX + "_" + cell.cellY] = cell;
-            if (cell.type !== "exit") {
-                minX = Math.min(minX, cell.cellX);
-                maxX = Math.max(maxX, cell.cellX);
-                minY = Math.min(minY, cell.cellY);
-                maxY = Math.max(maxY, cell.cellY);
-            }
+            minX = Math.min(minX, cell.cellX);
+            maxX = Math.max(maxX, cell.cellX);
+            minY = Math.min(minY, cell.cellY);
+            maxY = Math.max(maxY, cell.cellY);
         }
 
         state.level.width = maxX - minX + 1;
@@ -351,7 +349,7 @@ var Game = {
             });
         });
         return {
-            player: {x: state.player.cellX, y: state.player.cellY},
+            player: {x: state.player.cellX, y: state.player.cellY, expectedColor: state.player.top.color},
             npcs: npcs,
             level: cells
         };
@@ -420,7 +418,7 @@ var Game = {
                 fields.setAttribute("id", "gg-level-dump");
                 document.body.appendChild(fields);
             }
-            document.getElementById("gg-level-dump").textContent = JSON.stringify(Game.dumpLevel(state), undefined, 4);
+            document.getElementById("gg-level-dump").textContent = "\"use strict\";\n\nGame.Levels.push(" + JSON.stringify(Game.dumpLevel(state), undefined, 4) + ");";
         }
     },
     tick: function (state, frameTime, keyboardInput, mouseInput) {
@@ -659,10 +657,10 @@ var Game = {
         function updateTriangle(triangle) {
             if (Math.random() > 0.995) {
                 triangle.eyeCenter.targetX = triangle.eyeCenter.baseX + Math.random() * 8 - 4;
-                triangle.eyeCenter.targetY =  triangle.eyeCenter.baseY + Math.random() * 8 - 4;
+                triangle.eyeCenter.targetY = triangle.eyeCenter.baseY + Math.random() * 8 - 4;
             }
-            triangle.eyeCenter.x  = triangle.eyeCenter.targetX * 0.1 + triangle.eyeCenter.x * 0.9;
-            triangle.eyeCenter.y  = triangle.eyeCenter.targetY * 0.1 + triangle.eyeCenter.y * 0.9;
+            triangle.eyeCenter.x = triangle.eyeCenter.targetX * 0.1 + triangle.eyeCenter.x * 0.9;
+            triangle.eyeCenter.y = triangle.eyeCenter.targetY * 0.1 + triangle.eyeCenter.y * 0.9;
 
             triangle.transform = GG.Transforms.createTRS(triangle.x, triangle.y, triangle.angle, triangle.scale);
             triangle.shadow.transform = GG.Transforms.multiply(
