@@ -131,6 +131,7 @@ var Game = {
             },
             meshes: {},
             textures: {
+                ice: undefined,
                 ground: undefined,
                 wall: undefined,
                 exit_closed: undefined,
@@ -177,7 +178,8 @@ var Game = {
                 green: [0.43, 0.48, 0.13, 1.0],
                 blue: [0.18, 0.26, 0.39, 1.0],
                 orange: [0.75, 0.36, 0, 1],
-                magenta: [0.55, 0.21, 0.48, 1.0]
+                magenta: [0.55, 0.21, 0.48, 1.0],
+                yellow: [0.79, 0.76, 0, 1.0]
             },
             editable: false,
             intro: {
@@ -366,12 +368,14 @@ var Game = {
                 var cell = state.level.index[cellIndex];
                 if (cell.occupiedBy === undefined && (state.player.cellX != cellX || state.player.cellY != cellY)) {
                     if (keyboardInput.shift) {
-                        if (cell.type === "ground")
+                        if (cell.type === "ground" || cell.type === "ice")
                             state.npcs.push(Game.makeTriangle(cellX, cellY, "red", "green", "blue", false, undefined, state, true));
                         else if (cell.type === "wall")
                             state.npcs.push(Game.makeTriangle(cellX, cellY, "red", "green", "blue", true, "good_luck", state, true));
                     } else {
                         if (cell.type === "ground")
+                            cell.type = "ice";
+                        else if (cell.type == "ice")
                             cell.type = "wall";
                         else if (cell.type === "wall" || cell.type === "exit") {
                             for (var i = 0; i < state.level.cells.length; ++i) {
@@ -540,7 +544,7 @@ var Game = {
                             }
                         } else {
                             var isMovingOntoExit = nextMove.type === "exit" && state.level.index[nextMove.x + "_" + nextMove.y].isOpen;
-                            if (nextMove.type === "ground" || (isMovingOntoExit && !state.editable)) {
+                            if (nextMove.type === "ground" || nextMove.type === "ice" || (isMovingOntoExit && !state.editable)) {
                                 forceEditRefresh = true;
                                 player.cellX = nextMove.x;
                                 player.cellY = nextMove.y;
@@ -580,28 +584,36 @@ var Game = {
                 if (movementX !== 0)
                     movementY = 0;
                 if (movementX !== 0 || movementY !== 0) {
+                    var cell;
                     var lastCell;
-                    if (player.nextMoves.length > 0)
-                        lastCell = player.nextMoves[player.nextMoves.length - 1];
-                    else
-                        lastCell = {x: player.cellX, y: player.cellY, occupiedBy: undefined, type: undefined};
-                    if (lastCell.occupiedBy === undefined || lastCell.type === "exit") { // TODO: fix microbug here on level end
-                        var newCell = {
-                            x: lastCell.x + movementX,
-                            y: lastCell.y + movementY,
-                            occupiedBy: undefined,
-                            type: undefined
-                        };
-                        var newCellIndex = newCell.x + "_" + newCell.y;
-                        if (state.level.index.hasOwnProperty(newCellIndex)) {
-                            var cell = state.level.index[newCellIndex];
-                            newCell.type = cell.type;
-                            if (cell.type === "ground" || cell.type === "exit") {
-                                newCell.occupiedBy = cell.occupiedBy;
-                                player.nextMoves.push(newCell);
+                    var isFirstOfSlide = true;
+                    do {
+                        cell = undefined;
+                        if (player.nextMoves.length > 0)
+                            lastCell = player.nextMoves[player.nextMoves.length - 1];
+                        else
+                            lastCell = {x: player.cellX, y: player.cellY, occupiedBy: undefined, type: undefined};
+                        if (lastCell.occupiedBy === undefined || lastCell.type === "exit") { // TODO: fix microbug here on level end
+                            var newCell = {
+                                x: lastCell.x + movementX,
+                                y: lastCell.y + movementY,
+                                occupiedBy: undefined,
+                                type: undefined
+                            };
+                            var newCellIndex = newCell.x + "_" + newCell.y;
+                            if (state.level.index.hasOwnProperty(newCellIndex)) {
+                                cell = state.level.index[newCellIndex];
+                                newCell.type = cell.type;
+                                if (cell.type === "ground" || cell.type === "exit" || (cell.type === "ice" && (!cell.occupiedBy || isFirstOfSlide)))  {
+                                    newCell.occupiedBy = cell.occupiedBy;
+                                    player.nextMoves.push(newCell);
+                                } else {
+                                    cell = undefined;
+                                }
                             }
                         }
-                    }
+                        isFirstOfSlide = false;
+                    } while (cell !== undefined && cell.type === "ice");
                 }
             } else if (state.level.state === "swap") {
                 if (keyboardInput.cancel) {
@@ -767,6 +779,17 @@ var Game = {
                 for (i = 0; i < state.level.cells.length; ++i) {
                     cell = state.level.cells[i];
                     if (cell.type == "ground") {
+                        GG.Transforms.toMat3(cell.transform, model);
+                        gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    }
+                }
+
+                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                gl.bindTexture(gl.TEXTURE_2D, state.textures.ice);
+                for (i = 0; i < state.level.cells.length; ++i) {
+                    cell = state.level.cells[i];
+                    if (cell.type == "ice") {
                         GG.Transforms.toMat3(cell.transform, model);
                         gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
                         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

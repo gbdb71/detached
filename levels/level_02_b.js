@@ -10,11 +10,7 @@ Game.Levels.push({
         {x: 4, y: 0, type: "ground"},
         {x: 5, y: 0, type: "ground"},
         {x: 6, y: 0, type: "ground"},
-        {x: 7, y: 0, type: "ground"},
-        {x: 2, y: 1, type: "ground"},
-        {x: 3, y: 1, type: "wall"},
-        {x: 4, y: 1, type: "ground"},
-        {x: 5, y: 1, type: "ground"}
+        {x: 7, y: 0, type: "ground"}
     ],
     player: {
         x: 7, y: 0, expectedColor: "red"
