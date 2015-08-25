@@ -160,6 +160,7 @@ var Game = {
                 background: undefined
             },
             sounds: {
+                blocked: undefined,
                 fall: undefined,
                 swap: undefined,
                 walk: undefined,
@@ -486,6 +487,7 @@ var Game = {
                 keyboardInput.enter = false;
                 state.level.nextLevel = parseInt(GG.Cookies.get('detached_level', '0'));
                 Game.loadLevel(state, false);
+                GG.Sounds.playSound(state.audio, state.sounds.win);
             }
         } else {
             var player = state.player;
@@ -619,6 +621,8 @@ var Game = {
                                     player.targetX = nextX;
                                     player.targetY = nextY;
                                 }
+                                if (nextMove.type === "exit" && !nextCell.isOpen)
+                                    GG.Sounds.playSound(state.audio, state.sounds.blocked);
                             }
                             player.nextMoves.splice(0, 1);
 
