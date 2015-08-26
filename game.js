@@ -117,7 +117,6 @@ var Game = {
         var state = {
             gl: gl,
             audio: GG.Sounds.getContext(),
-            vaoExtension: gl.getExtension("OES_vertex_array_object"),
             loadLock: 0,
             shader: {
                 program: undefined,
@@ -221,13 +220,13 @@ var Game = {
             Object.keys(state.shader.uniforms).forEach(function (key) {
                 state.shader.uniforms[key] = state.gl.getUniformLocation(program, key);
             });
-            state.meshes.quad_128 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128);
-            state.meshes.quad_256 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 256, 256);
-            state.meshes.quad_1024 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 1024, 1024);
-            state.meshes.quad_4096 = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 4096, 4096);
-            state.meshes.message = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128, 0, 1);
-            state.meshes.edit_mode = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 128, 128, 1, 0);
-            state.meshes.menu_text = GG.Meshes.createQuadVAO(state.gl, state.vaoExtension, state.shader.attributes.position, state.shader.attributes.uv, 256, 256, 0, 1);
+            state.meshes.quad_128 = GG.Meshes.createQuad(state.gl, state.shader.attributes.position, state.shader.attributes.uv, 128, 128);
+            state.meshes.quad_256 = GG.Meshes.createQuad(state.gl, state.shader.attributes.position, state.shader.attributes.uv, 256, 256);
+            state.meshes.quad_1024 = GG.Meshes.createQuad(state.gl, state.shader.attributes.position, state.shader.attributes.uv, 1024, 1024);
+            state.meshes.quad_4096 = GG.Meshes.createQuad(state.gl, state.shader.attributes.position, state.shader.attributes.uv, 4096, 4096);
+            state.meshes.message = GG.Meshes.createQuad(state.gl, state.shader.attributes.position, state.shader.attributes.uv, 128, 128, 0, 1);
+            state.meshes.edit_mode = GG.Meshes.createQuad(state.gl, state.shader.attributes.position, state.shader.attributes.uv, 128, 128, 1, 0);
+            state.meshes.menu_text = GG.Meshes.createQuad(state.gl, state.shader.attributes.position, state.shader.attributes.uv, 256, 256, 0, 1);
         });
 
         Object.keys(state.textures).forEach(function (textureName) {
@@ -851,7 +850,7 @@ var Game = {
             var bcakgroundTransform = GG.Transforms.createTRS(camera.x, camera.y, 0, camera.scale);
             GG.Transforms.toMat3(bcakgroundTransform, model);
             gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
-            state.vaoExtension.bindVertexArrayOES(state.meshes.quad_1024);
+            GG.Meshes.bindMesh(gl, state.meshes.quad_1024);
             if (state.level.state === "intro")
                 gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, Math.max(0, Math.min(1, state.time - state.intro.introTime)));
             else
@@ -860,17 +859,17 @@ var Game = {
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
             if (state.level.state === "intro") {
-                state.vaoExtension.bindVertexArrayOES(state.meshes.menu_text);
+                GG.Meshes.bindMesh(gl, state.meshes.menu_text);
                 gl.bindTexture(gl.TEXTURE_2D, state.textures["menu_" + state.intro.activeMenu]);
                 gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, Math.max(0, Math.min(1, state.time - state.intro.introTime)));
                 var menuTransform = GG.Transforms.createTRS(state.player.x - 0.5 *state.level.cellSize+ 0.2 * state.level.cellSize, state.player.y - 0.5 *state.level.cellSize +0.6 * state.level.cellSize, 0, 1);
                 GG.Transforms.toMat3(menuTransform, model);
                 gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
                 gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                GG.Meshes.bindMesh(gl, state.meshes.quad_128);
                 drawTriangle(state.player, state.intro.activeMenu, true);
             } else {
-                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                GG.Meshes.bindMesh(gl, state.meshes.quad_128);
                 for (var i = 0; i < state.level.cells.length; ++i) {
                     var cell = state.level.cells[i];
                     if (cell.type == "exit") {
@@ -884,7 +883,7 @@ var Game = {
                     }
                 }
 
-                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                GG.Meshes.bindMesh(gl, state.meshes.quad_128);
                 gl.bindTexture(gl.TEXTURE_2D, state.textures.ground);
                 for (i = 0; i < state.level.cells.length; ++i) {
                     cell = state.level.cells[i];
@@ -895,7 +894,7 @@ var Game = {
                     }
                 }
 
-                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                GG.Meshes.bindMesh(gl, state.meshes.quad_128);
                 gl.bindTexture(gl.TEXTURE_2D, state.textures.ice);
                 for (i = 0; i < state.level.cells.length; ++i) {
                     cell = state.level.cells[i];
@@ -906,7 +905,7 @@ var Game = {
                     }
                 }
 
-                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                GG.Meshes.bindMesh(gl, state.meshes.quad_128);
                 gl.bindTexture(gl.TEXTURE_2D, state.textures.trap_closed);
                 for (i = 0; i < state.level.cells.length; ++i) {
                     cell = state.level.cells[i];
@@ -917,7 +916,7 @@ var Game = {
                     }
                 }
 
-                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                GG.Meshes.bindMesh(gl, state.meshes.quad_128);
                 gl.bindTexture(gl.TEXTURE_2D, state.textures.trap_open);
                 for (i = 0; i < state.level.cells.length; ++i) {
                     cell = state.level.cells[i];
@@ -928,7 +927,7 @@ var Game = {
                     }
                 }
 
-                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                GG.Meshes.bindMesh(gl, state.meshes.quad_128);
                 for (i = 0; i < state.npcs.length; ++i) {
                     var npc = state.npcs[i];
                     if (!npc.isTalker)
@@ -938,7 +937,7 @@ var Game = {
                 if (state.level.state !== "win")
                     drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined, true);
 
-                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_256);
+                GG.Meshes.bindMesh(gl, state.meshes.quad_256);
                 gl.bindTexture(gl.TEXTURE_2D, state.textures.wall);
                 for (i = 0; i < state.level.cells.length; ++i) {
                     cell = state.level.cells[i];
@@ -949,7 +948,7 @@ var Game = {
                     }
                 }
 
-                state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                GG.Meshes.bindMesh(gl, state.meshes.quad_128);
                 for (i = 0; i < state.npcs.length; ++i) {
                     npc = state.npcs[i];
                     if (npc.isTalker)
@@ -959,7 +958,7 @@ var Game = {
                 for (i = 0; i < state.npcs.length; ++i) {
                     npc = state.npcs[i];
                     if (npc.isTalker && npc.message !== undefined) {
-                        state.vaoExtension.bindVertexArrayOES(state.meshes.message);
+                        GG.Meshes.bindMesh(gl, state.meshes.message);
                         gl.bindTexture(gl.TEXTURE_2D, state.textures[npc.message.texture]);
                         GG.Transforms.toMat3(npc.message.transform, model);
                         gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
@@ -971,7 +970,7 @@ var Game = {
                 if (state.level.state === "win" || state.level.state === "load") {
                     GG.Transforms.toMat3(state.player.transform, model);
                     gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
-                    state.vaoExtension.bindVertexArrayOES(state.meshes.quad_4096);
+                    GG.Meshes.bindMesh(gl, state.meshes.quad_4096);
                     if (state.level.state === "win")
                         gl.uniform4f(state.shader.uniforms.tint, state.background[0], state.background[1], state.background[2], Math.min(1.0, state.time - state.level.winTime));
                     else
@@ -980,7 +979,7 @@ var Game = {
                     gl.bindTexture(gl.TEXTURE_2D, state.textures.fill);
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-                    state.vaoExtension.bindVertexArrayOES(state.meshes.quad_128);
+                    GG.Meshes.bindMesh(gl, state.meshes.quad_128);
                     drawTriangle(state.player, state.level.state === "swap" ? state.level.swapPart : undefined, true);
                 }
 
@@ -991,7 +990,7 @@ var Game = {
 
                     GG.Transforms.toMat3(transform, model);
                     gl.uniformMatrix3fv(state.shader.uniforms.model, false, model);
-                    state.vaoExtension.bindVertexArrayOES(state.meshes.edit_mode);
+                    GG.Meshes.bindMesh(gl, state.meshes.edit_mode);
                     gl.bindTexture(gl.TEXTURE_2D, state.textures.edit_mode);
                     gl.uniform4f(state.shader.uniforms.tint, 1, 1, 1, 1);
                     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

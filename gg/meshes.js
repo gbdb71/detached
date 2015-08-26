@@ -1,13 +1,11 @@
 "use strict";
 
 GG.Meshes = {
-    createQuadVAO: function (gl, vaoExtension, positionAttribute, uvAttribute, width, height, xAlign, yAlign) {
+    createQuad: function (gl, positionAttribute, uvAttribute, width, height, xAlign, yAlign) {
         if (xAlign === undefined)
             xAlign = 0.5;
         if (yAlign === undefined)
             yAlign = 0.5;
-        var vao = vaoExtension.createVertexArrayOES();
-        vaoExtension.bindVertexArrayOES(vao);
         var buffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         var lowX = (xAlign - 1) * width;
@@ -24,7 +22,21 @@ GG.Meshes = {
         gl.enableVertexAttribArray(uvAttribute);
         gl.vertexAttribPointer(positionAttribute, 2, gl.FLOAT, false, 4 * 4, 0);
         gl.vertexAttribPointer(uvAttribute, 2, gl.FLOAT, false, 4 * 4, 4 * 2);
-        vaoExtension.bindVertexArrayOES(null);
-        return vao;
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        return {
+            buffer: buffer,
+            stride: 4 * 4,
+            positionAttribute: positionAttribute,
+            uvAttribute: uvAttribute,
+            positionOffset: 0,
+            uvOffset: 4 * 2
+        };
+    },
+    bindMesh: function(gl, mesh) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.buffer);
+        gl.enableVertexAttribArray(mesh.positionAttribute);
+        gl.enableVertexAttribArray(mesh.uvAttribute);
+        gl.vertexAttribPointer(mesh.positionAttribute, 2, gl.FLOAT, false, mesh.stride, mesh.positionOffset);
+        gl.vertexAttribPointer(mesh.uvAttribute, 2, gl.FLOAT, false, mesh.stride, mesh.uvOffset);
     }
 };
